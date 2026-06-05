@@ -1,0 +1,18 @@
+FinanceFugue
+Copyright (c) 2026 Kirill Fandeev (KVF SOFT)
+All rights reserved.
+
+Проприетарное программное обеспечение.
+Распространение и использование без лицензии правообладателя запрещены,
+за исключением случаев, прямо предусмотренных отдельным договором или EULA.
+
+---
+
+Сторонние компоненты:
+
+PySide6 — GNU Lesser General Public License v3 (LGPL v3)
+https://www.qt.io/qt-for-python
+
+При распространении FinanceFugue необходимо соблюдать условия LGPL для PySide6,
+включая предоставление пользователю возможности заменить библиотеку Qt.
+Подробности: THIRD_PARTY_LICENSES.txt

@@ -1,0 +1,26 @@
+FinanceFugue — сторонние компоненты
+=====================================
+
+PySide6
+-------
+License: GNU Lesser General Public License v3 (LGPL v3)
+Website: https://www.qt.io/qt-for-python
+Obligations (LGPL v3): при распространении собранного дистрибутива (EXE)
+необходимо:
+  1) предоставить пользователю текст лицензии LGPL и данный файл;
+  2) обеспечить возможность заменить библиотеку Qt (object files / инструкция);
+  3) указать, что FinanceFugue использует PySide6.
+Исходный код Qt: https://www.qt.io/download
+
+Python
+------
+License: PSF License
+Website: https://www.python.org/
+
+Стандартная библиотека Python распространяется вместе с интерпретатором
+или в составе собранного исполняемого файла PyInstaller.
+
+PyInstaller (только при сборке дистрибутива)
+--------------------------------------------
+License: GPLv2 with special exception
+Website: https://pyinstaller.org/

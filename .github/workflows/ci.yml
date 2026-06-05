@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-lint:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: FinanceFugue
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Ruff lint
+        run: ruff check src tests main_pyside.py scripts
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Run Qt tests
+        run: pytest tests/qt -v
+
+  build-exe:
+    runs-on: windows-latest
+    needs: test-and-lint
+    defaults:
+      run:
+        working-directory: FinanceFugue
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install build dependencies
+        run: |
+          pip install Pillow
+          python scripts/create_icon.py
+          pip install -r requirements-build.txt
+      - name: Build EXE
+        run: pyinstaller build.spec --noconfirm
+      - name: Verify EXE exists
+        run: Test-Path dist/FinanceFugue.exe

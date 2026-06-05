@@ -1,37 +1,32 @@
-# Client Manager
+# FinanceFugue
 
-История версий desktop-приложения **Client Manager** (CRM для клиентов).
+Desktop CRM для управления клиентами и заказами.
 
-## Структура репозитория
+## Актуальная версия
 
-| Ветка | Содержимое |
-|-------|------------|
-| `main` | Все версии в папках `client manager 01` … `client manager 24` |
-| `v01` … `v24` | Каждая ветка — снимок одной версии в корне репозитория (готово к запуску) |
-
-**Актуальная версия:** `v24` / папка `client manager 24`
-
-## Вехи
-
-| Версии | Описание |
-|--------|----------|
-| 01–04 | Ранние прототипы (`main.py`) |
-| 05–08 | Модульная структура, tkinter |
-| 09–22 | PySide6 |
-| 23–24 | SQLite, шифрование |
-
-## Запуск
+**FinanceFugue** — папка `FinanceFugue/` (версия 05.06.2026)
 
 ```bash
-git checkout v24
-pip install PySide6
+cd FinanceFugue
+pip install -r requirements.txt
 python main_pyside.py
 ```
 
-Или из архива на `main`:
+## История версий
+
+Старые версии (01–24) хранятся на GitHub в ветках `v01` … `v24` и в ветке `main`.
+
+## Тесты
 
 ```bash
-cd "client manager 24"
-pip install PySide6
-python main_pyside.py
+cd FinanceFugue
+python -m unittest discover -s tests -v
+```
+
+## Сборка
+
+```bash
+cd FinanceFugue
+pip install -r requirements-build.txt
+pyinstaller build.spec
 ```

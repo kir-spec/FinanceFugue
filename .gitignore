@@ -7,3 +7,13 @@ _reorganize.py
 /main.py
 /FinanceFugue.ico
 /FinanceFugue.jpg
+FinanceFugue/logs/
+FinanceFugue/settings_backups/
+FinanceFugue/pro_database.json
+FinanceFugue/pro_database.db
+FinanceFugue/crm_settings.json
+FinanceFugue/crm.key
+FinanceFugue/dist/
+FinanceFugue/build/
+FinanceFugue/.ruff_cache/
+client manager */

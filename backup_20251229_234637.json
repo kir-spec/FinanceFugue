@@ -1,0 +1,31 @@
+[
+    {
+        "id": "94254b8f-b2de-4311-b767-82cd621ba513",
+        "name": "1",
+        "email": "",
+        "social_link": "",
+        "notes": "",
+        "orders": [
+            {
+                "id": "63d9f44d-e37d-49ef-b6a0-9584c9b33659",
+                "service_type": "Нотный набор",
+                "price": 0.0,
+                "currency": "RUB",
+                "advance": 0.0,
+                "created_at": "27.12.2025 20:12",
+                "deadline": "31.12.2026",
+                "status": "В работе",
+                "files": [],
+                "payments": []
+            }
+        ]
+    },
+    {
+        "id": "c1e6d7be-7472-48ab-a73a-cfa583d85d6c",
+        "name": "2",
+        "email": "",
+        "social_link": "",
+        "notes": "",
+        "orders": []
+    }
+]

@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.vscode/
+*.bak
+_reorganize.py
+экономия токенов.txt
+/main.py
+/FinanceFugue.ico
+/FinanceFugue.jpg

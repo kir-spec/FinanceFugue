@@ -1,0 +1,114 @@
+2026-01-01 11:45:33,775 [INFO] MainWindow: Инициализация приложения
+2026-01-01 11:45:33,776 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 11:53:51,712 [INFO] MainWindow: Инициализация приложения
+2026-01-01 11:53:51,727 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 11:58:03,851 [INFO] MainWindow: Инициализация приложения
+2026-01-01 11:58:03,852 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:09:35,605 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:09:35,605 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:12:15,401 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:12:15,402 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:18:29,850 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:18:29,851 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:22:21,562 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:22:21,563 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:25:46,099 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:25:46,101 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:29:05,429 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:29:05,430 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:33:30,538 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:33:30,538 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:47:17,640 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:47:17,640 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:47:48,675 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:47:48,676 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:51:39,359 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:51:39,359 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 12:53:19,629 [INFO] MainWindow: Инициализация приложения
+2026-01-01 12:53:19,630 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 13:46:17,643 [INFO] MainWindow: Инициализация приложения
+2026-01-01 13:46:17,653 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 13:51:49,699 [INFO] MainWindow: Инициализация приложения
+2026-01-01 13:51:49,700 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 13:56:45,186 [INFO] MainWindow: Инициализация приложения
+2026-01-01 13:56:45,187 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 13:57:54,614 [INFO] MainWindow: Инициализация приложения
+2026-01-01 13:57:54,614 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 14:03:00,455 [INFO] MainWindow: Инициализация приложения
+2026-01-01 14:03:00,455 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 14:10:28,846 [INFO] MainWindow: Инициализация приложения
+2026-01-01 14:10:28,847 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 14:13:01,440 [INFO] MainWindow: Инициализация приложения
+2026-01-01 14:13:01,447 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 14:16:40,302 [INFO] MainWindow: Инициализация приложения
+2026-01-01 14:16:40,308 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 14:21:41,503 [INFO] MainWindow: Инициализация приложения
+2026-01-01 14:21:41,513 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 14:23:42,347 [INFO] MainWindow: Инициализация приложения
+2026-01-01 14:23:42,348 [INFO] MainWindow: Загружено клиентов: 3
+2026-01-01 15:46:20,718 [INFO] MainWindow: Инициализация приложения
+2026-01-01 15:46:20,720 [INFO] MainWindow: Загружено клиентов: 4
+2026-01-01 15:46:41,992 [INFO] MainWindow: Добавлен новый клиент: 1 (ID: 8f46af01-be7d-4fef-9f42-8629ed10afe7)
+2026-01-01 15:46:43,753 [INFO] MainWindow: Добавлен новый заказ для 1: Монтаж звука (ID: 2f6b213d-724d-4cfe-8a89-ca75d97f95b0)
+2026-01-01 15:46:47,412 [INFO] MainWindow: Добавлен новый клиент: 2 (ID: b68c0a56-f513-4dec-99c1-b80da8b18ab5)
+2026-01-01 15:46:51,272 [INFO] MainWindow: Добавлен новый заказ для 2: Сведение (ID: 4674f14d-136f-4f3b-878f-dfc88dc6cf2f)
+2026-01-01 16:14:58,886 [INFO] MainWindow: Инициализация приложения
+2026-01-01 16:14:58,893 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 16:14:58,906 [INFO] MainWindow: SQLite база пуста. Выполняется миграция из JSON...
+2026-01-01 16:14:58,908 [INFO] SQLiteStorage: SQLite: Migrated 3 clients.
+2026-01-01 16:14:58,916 [INFO] SQLiteStorage: SQLite: Orders migrated successfully.
+2026-01-01 16:14:58,923 [INFO] SQLiteStorage: SQLite: Payments migrated successfully.
+2026-01-01 16:14:58,931 [INFO] SQLiteStorage: SQLite: Files migrated successfully.
+2026-01-01 16:14:58,933 [INFO] MainWindow: Миграция завершена. Загружено клиентов: 3
+2026-01-01 16:33:35,966 [INFO] MainWindow: Инициализация приложения
+2026-01-01 16:33:36,101 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 16:33:53,777 [INFO] MainWindow: Добавлен новый клиент: 1 (ID: f189fede-79d0-4fae-860f-b5733ddc662c)
+2026-01-01 16:44:43,034 [INFO] MainWindow: Инициализация приложения
+2026-01-01 16:44:43,067 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 16:45:57,837 [INFO] MainWindow: Инициализация приложения
+2026-01-01 16:45:57,873 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 16:50:43,091 [INFO] MainWindow: Инициализация приложения
+2026-01-01 16:50:43,131 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 16:54:25,239 [INFO] MainWindow: Инициализация приложения
+2026-01-01 16:54:25,306 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:04:51,795 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:04:51,863 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:06:25,745 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:06:25,809 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:06:25,809 [INFO] Backend: Checking security configuration. Methods available: ['change_password', 'check_app_password', 'check_db_password', 'has_app_password', 'password_hash', 'remove_app_password', 'set_app_password']
+2026-01-01 17:07:34,732 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:07:34,793 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:08:09,529 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:08:09,562 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:09:08,449 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:09:08,481 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:10:06,757 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:10:06,794 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:10:38,993 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:10:39,031 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:10:59,930 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:10:59,965 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:13:13,847 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:13:13,947 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:13:38,595 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:13:38,635 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:14:01,394 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:14:01,425 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:15:06,843 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:15:06,878 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:15:28,128 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:15:28,162 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:16:41,930 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:16:41,966 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:17:02,951 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:17:02,983 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:18:38,778 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:18:38,818 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:20:59,291 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:20:59,319 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 17:23:09,413 [INFO] MainWindow: Инициализация приложения
+2026-01-01 17:23:09,443 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 23:49:41,554 [INFO] MainWindow: Инициализация приложения
+2026-01-01 23:52:03,344 [INFO] MainWindow: Инициализация приложения
+2026-01-01 23:52:03,353 [INFO] SQLiteStorage: SQLite: Database initialized successfully.
+2026-01-01 23:52:03,353 [INFO] Backend: Первый запуск приложения: требуется настройка.

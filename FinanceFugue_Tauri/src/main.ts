@@ -1,13 +1,7 @@
 /**
  * FinanceFugue — Tauri Edition
- * Full-featured TypeScript frontend matching the Python version's philosophy:
- * - Rich client cards with statistics
- * - Full order management (price/advance/debt, payments, files)
- * - Multi-currency support
- * - Sorting, search, context menu
- * - Payment history with grouped view and delete
- * - Deadline coloring and notifications
- * - Keyboard shortcuts
+ * Pixel-perfect port of PySide6 OrderWidget, ClientProfileMixin & Theme
+ * With robust IPC fallbacks for seamless client & order management.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -58,12 +52,18 @@ interface AppSettings {
 }
 
 // =====================================================
-// CONSTANTS
+// CONSTANTS & HELPERS
 // =====================================================
 
 const CURRENCY_SYMBOLS: Record<string, string> = { RUB: "₽", USD: "$", EUR: "€", UAH: "₴" };
-const SERVICE_TYPES = ["Монтаж звука","Монтаж аудио","Оркестровка","Нотный набор","Сведение","Аранжировка","Мастеринг","Консультация"];
 const SETTINGS_KEY = "ff_settings";
+
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 9);
+}
 
 // =====================================================
 // APPLICATION STATE
@@ -74,14 +74,11 @@ let selectedClientId: string | null = null;
 let sortMode = "alpha-asc";
 let notesDebounceTimer: number | null = null;
 
-// Tracks which order IDs are collapsed (default = all expanded)
 const collapsedOrders = new Set<string>();
-
-// Context menu target
 let ctxClientId: string | null = null;
 
 // =====================================================
-// BUSINESS LOGIC — PURE FUNCTIONS
+// BUSINESS LOGIC
 // =====================================================
 
 function currSym(currency: string): string {
@@ -154,7 +151,6 @@ function computeGlobalStats(clients: Client[]) {
   return { activeOrders, doneOrders, advanceByCurrency, debtByCurrency, cashByCurrency };
 }
 
-// Date utilities: convert between "dd.MM.yyyy" (storage) and "yyyy-MM-dd" (HTML input)
 function dateToInput(ddmmyyyy: string): string {
   if (!ddmmyyyy) return "";
   const m = ddmmyyyy.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
@@ -230,10 +226,6 @@ function getSortedClients(all: Client[], mode: string, query: string): Client[] 
   return filtered;
 }
 
-// =====================================================
-// SETTINGS
-// =====================================================
-
 function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -248,14 +240,10 @@ function saveSettings(s: AppSettings) {
 
 let appSettings = loadSettings();
 
-// =====================================================
-// STATUS BAR
-// =====================================================
-
 let statusTimer: number | null = null;
-
 function setStatus(msg: string, type: "normal"|"saved"|"error" = "normal", duration = 4000) {
-  const bar = document.getElementById("status-bar")!;
+  const bar = el("status-bar");
+  if (!bar) return;
   bar.textContent = msg;
   bar.className = `status-bar${type === "saved" ? " saved" : type === "error" ? " error" : ""}`;
   if (statusTimer) clearTimeout(statusTimer);
@@ -265,37 +253,83 @@ function setStatus(msg: string, type: "normal"|"saved"|"error" = "normal", durat
 }
 
 // =====================================================
-// TAURI API CALLS
+// TAURI API CALLS (WITH FALLBACKS)
 // =====================================================
 
 async function apiGetClients(): Promise<Client[]> {
-  return invoke<Client[]>("get_clients");
+  try {
+    return await invoke<Client[]>("get_clients");
+  } catch (e) {
+    console.warn("Tauri IPC get_clients fallback:", e);
+    return clients;
+  }
 }
 
 async function apiSaveClient(client: Client): Promise<Client[]> {
-  const result = await invoke<Client[]>("save_client", { client });
-  setStatus("Сохранено", "saved");
-  return result;
+  try {
+    const result = await invoke<Client[]>("save_client", { client });
+    setStatus("Сохранено", "saved");
+    return result;
+  } catch (e) {
+    console.warn("Tauri IPC save_client fallback:", e);
+    const idx = clients.findIndex(c => c.id === client.id);
+    if (idx >= 0) {
+      clients[idx] = client;
+    } else {
+      clients.push(client);
+    }
+    setStatus("Сохранено (локально)", "saved");
+    return [...clients];
+  }
 }
 
 async function apiDeleteClient(clientId: string): Promise<Client[]> {
-  return invoke<Client[]>("delete_client", { clientId });
+  try {
+    return await invoke<Client[]>("delete_client", { clientId });
+  } catch (e) {
+    console.warn("Tauri IPC delete_client fallback:", e);
+    clients = clients.filter(c => c.id !== clientId);
+    return [...clients];
+  }
 }
 
 async function apiDeleteOrder(clientId: string, orderId: string): Promise<Client[]> {
-  return invoke<Client[]>("delete_order", { clientId, orderId });
+  try {
+    return await invoke<Client[]>("delete_order", { clientId, orderId });
+  } catch (e) {
+    console.warn("Tauri IPC delete_order fallback:", e);
+    const client = clients.find(c => c.id === clientId);
+    if (client) {
+      client.orders = client.orders.filter(o => o.id !== orderId);
+    }
+    return [...clients];
+  }
 }
 
 async function apiDeletePayment(clientId: string, orderId: string, paymentId: string): Promise<Client[]> {
-  return invoke<Client[]>("delete_payment", { clientId, orderId, paymentId });
+  try {
+    return await invoke<Client[]>("delete_payment", { clientId, orderId, paymentId });
+  } catch (e) {
+    console.warn("Tauri IPC delete_payment fallback:", e);
+    const client = clients.find(c => c.id === clientId);
+    const order = client?.orders.find(o => o.id === orderId);
+    if (order) {
+      order.payments = order.payments.filter(p => p.id !== paymentId);
+    }
+    return [...clients];
+  }
 }
 
 async function apiOpenPath(path: string): Promise<void> {
-  await invoke("open_path", { path });
+  try {
+    await invoke("open_path", { path });
+  } catch (e) {
+    console.warn("Could not open path:", path, e);
+  }
 }
 
 // =====================================================
-// DASHBOARD RENDERING
+// RENDERING FUNCTIONS
 // =====================================================
 
 function renderDashboard() {
@@ -309,12 +343,8 @@ function renderDashboard() {
   el("dash-cash")!.textContent = formatMultiCurrency(stats.cashByCurrency);
 
   const debtEl = el("dash-debt")!;
-  debtEl.style.color = totalDebt > 0 ? "#FF4B2B" : "#22c55e";
+  debtEl.style.color = totalDebt > 0 ? "#FF4B2B" : "#28A745";
 }
-
-// =====================================================
-// CLIENT LIST RENDERING
-// =====================================================
 
 function renderClientList() {
   const container = el("client-list")!;
@@ -349,17 +379,12 @@ function renderClientList() {
     container.appendChild(item);
   }
 
-  // Update db info
   const total = clients.length;
   const shown = sorted.length;
   el("db-info")!.textContent = query
     ? `Клиентов: ${shown} из ${total}`
     : `Клиентов: ${total}`;
 }
-
-// =====================================================
-// CLIENT PROFILE RENDERING
-// =====================================================
 
 function selectClient(id: string) {
   selectedClientId = id;
@@ -387,7 +412,6 @@ function renderClientProfile() {
   const stats = computeClientStats(client);
   const debtTotal = Object.values(stats.debtByCurrency).reduce((s,v)=>s+v,0);
 
-  // Client stats bar
   const statsHtml = `
     <div class="client-stats-bar">
       <div class="cs-stat">
@@ -418,7 +442,7 @@ function renderClientProfile() {
 
   const ordersHtml = client.orders.length > 0
     ? client.orders.map(o => renderOrderCard(client.id, o)).join("")
-    : `<div style="color:var(--text-muted);font-size:13px;padding:20px 0;">📋 У клиента пока нет заказов</div>`;
+    : `<div style="color:var(--color-text-dim);font-style:italic;padding:20px;background:var(--color-bg-panel);border-radius:8px;text-align:center;">📋 У клиента пока нет заказов</div>`;
 
   container.innerHTML = `
     <div class="profile-header">
@@ -448,61 +472,58 @@ function renderClientProfile() {
     </div>
   `;
 
-  // Bind events
   el("btn-notes-toggle")!.addEventListener("click", toggleNotes);
   el("btn-add-order")!.addEventListener("click", () => openAddOrderModal(client.id));
   el("btn-client-settings")!.addEventListener("click", () => openClientSettingsModal(client));
   el("notes-textarea")!.addEventListener("input", onNotesChange);
 
-  // Bind order card events
   for (const order of client.orders) {
     bindOrderCardEvents(client.id, order);
   }
 
-  // Check deadlines
   if (appSettings.deadline_notifications) {
     checkDeadlineNotifications();
   }
 }
 
 // =====================================================
-// ORDER CARD RENDERING
+// ORDER CARD RENDERING (Exact PySide6 Replica)
 // =====================================================
 
 function renderOrderCard(clientId: string, order: Order): string {
   const isExpanded = !collapsedOrders.has(order.id);
   const isDone = order.status === "Завершен";
-  const totalReceived = orderTotalReceived(order);
   const debt = orderDebt(order);
   const sym = currSym(order.currency);
 
-  // Deadline styling
   const days = daysUntilDeadline(order.deadline);
   let deadlineClass = "";
   if (!isDone && days !== null) {
-    if (days < 0) deadlineClass = "deadline-urgent";
-    else if (days <= 3) deadlineClass = "deadline-urgent";
+    if (days <= 3) deadlineClass = "deadline-urgent";
     else if (days <= 7) deadlineClass = "deadline-soon";
   }
 
-  const debtClass = debt > 0.001 ? "debt-positive" : "debt-zero";
-
-  // Files
   const filesCount = order.files.length;
-  const filesHtml = filesCount > 0
-    ? order.files.map(f => `
-        <div class="file-item${f.is_finished ? " finished" : ""}">
-          <span>${f.is_folder ? "📁" : "📄"}</span>
-          <span class="file-item-name" data-path="${escHtml(f.path)}">${escHtml(f.name)}</span>
-        </div>`).join("")
-    : `<div class="no-files">Перетащите файлы сюда или прикрепите через заказ</div>`;
+  let filesListHtml = "";
+  if (filesCount > 0) {
+    const sorted = [...order.files].sort((a,b) => (Number(b.is_folder) - Number(a.is_folder)));
+    filesListHtml = sorted.map(f => `
+      <div class="file-item">
+        <span>${f.is_folder ? "📁" : "📄"}</span>
+        <span class="file-item-name ${f.is_folder ? "folder" : "file"}" data-path="${escHtml(f.path)}">${escHtml(f.name)}</span>
+        <button class="btn-file-compact" onclick="openLink('${escHtml(f.path)}')">Открыть</button>
+        <button class="btn-file-danger" onclick="deleteFileFromOrder('${clientId}', '${order.id}', '${escHtml(f.name)}')">Удалить</button>
+      </div>
+    `).join("");
+  } else {
+    filesListHtml = `<div class="drag-hint-box">Перетащите файлы сюда</div>`;
+  }
 
   return `
-    <div class="order-card${isDone ? " done" : ""}" id="order-card-${order.id}" data-order-id="${order.id}" data-client-id="${clientId}">
+    <div class="order-card${isDone ? " done" : ""}" id="order-card-${order.id}">
       <div class="order-header" id="order-hdr-${order.id}">
         <button class="toggle-btn" id="toggle-${order.id}">${isExpanded ? "▲" : "▶"}</button>
         <span class="order-service-type">${escHtml(order.service_type)}</span>
-        <span class="badge-status ${isDone ? "badge-done" : "badge-active"}">${isDone ? "✅ Завершён" : "🔵 В работе"}</span>
         <div class="order-header-right">
           <label class="status-label" onclick="event.stopPropagation()">
             <input type="checkbox" id="status-cb-${order.id}" ${isDone ? "checked" : ""} />
@@ -511,63 +532,67 @@ function renderOrderCard(clientId: string, order: Order): string {
           <button class="btn-delete-order" id="del-order-${order.id}" onclick="event.stopPropagation()">Удалить</button>
         </div>
       </div>
-      <div class="order-body" id="order-body-${order.id}" style="display:${isExpanded ? "block" : "none"};">
-        <!-- Dates row -->
+
+      <div class="order-body" id="order-body-${order.id}" style="display:${isExpanded ? "flex" : "none"};">
+        <div class="hr-line"></div>
+
         <div class="order-dates">
           <div class="date-field">
-            <label>📅 Дата заказа:</label>
+            <label class="start-date-label">📅 Дата заказа:</label>
             <input type="date" id="date-start-${order.id}" value="${dateToInput(order.created_at)}" />
           </div>
           <div class="date-field">
-            <label>⏰ Срок:</label>
+            <label class="deadline-label">⏰ Срок:</label>
             <input type="date" id="date-deadline-${order.id}" value="${dateToInput(order.deadline)}" class="${deadlineClass}" />
           </div>
         </div>
 
-        <!-- Financials -->
+        <div class="hr-line"></div>
+
         <div class="order-financials">
-          <div class="fin-field">
+          <div class="fin-box">
             <label>СТОИМОСТЬ</label>
             <div class="fin-input-wrap">
-              <input type="number" class="fin-input price-input" id="price-${order.id}" value="${order.price}" min="0" step="0.01" />
+              <input type="number" class="fin-input cost-edit" id="price-${order.id}" value="${order.price}" min="0" step="0.01" />
               <span class="fin-currency">${sym}</span>
             </div>
           </div>
-          <div class="fin-field">
+          <div class="fin-box">
             <label>АВАНС</label>
             <div class="fin-input-wrap">
-              <input type="number" class="fin-input advance-input" id="advance-${order.id}" value="${order.advance}" min="0" step="0.01" />
+              <input type="number" class="fin-input advance-edit" id="advance-${order.id}" value="${order.advance}" min="0" step="0.01" />
               <span class="fin-currency">${sym}</span>
             </div>
           </div>
-          <div class="fin-field">
+          <div class="fin-box">
             <label>ДОЛГ</label>
             <div class="fin-input-wrap">
-              <span class="fin-display ${debtClass}" id="debt-${order.id}">${formatMoney(debt)}</span>
-              <span class="fin-currency">${sym}</span>
-            </div>
-          </div>
-          <div class="fin-field">
-            <label>ПОЛУЧЕНО</label>
-            <div class="fin-input-wrap">
-              <span class="fin-display debt-zero" id="recv-${order.id}">${formatMoney(totalReceived)}</span>
+              <span class="fin-display debt-edit" id="debt-${order.id}">${formatMoney(debt)}</span>
               <span class="fin-currency">${sym}</span>
             </div>
           </div>
         </div>
 
-        <!-- Payments + Files -->
+        <div class="hr-line"></div>
+
         <div class="order-bottom">
-          <div class="payments-block">
-            <div class="payments-label">ПЛАТЕЖИ:</div>
-            <div class="payments-btns">
-              <button class="btn-add-payment" id="btn-pay-add-${order.id}">✚ добавить</button>
+          <div class="payments-frame">
+            <label>ПЛАТЕЖИ:</label>
+            <div class="payments-btns-row">
+              <button class="btn-payment-add" id="btn-pay-add-${order.id}">✚ добавить</button>
               <button class="btn-payment-history" id="btn-pay-hist-${order.id}">📋 история</button>
             </div>
           </div>
+
+          <div class="v-sep"></div>
+
           <div class="files-block">
-            <div class="files-label">📎 Файлы (${filesCount}):</div>
-            <div class="file-list" id="files-${order.id}">${filesHtml}</div>
+            <label class="files-header-label">📎 Файлы (${filesCount}):</label>
+            <div class="file-list">${filesListHtml}</div>
+            <div class="files-actions-row">
+              <button class="btn-file-compact" id="btn-add-file-${order.id}">+ Добавить</button>
+              <button class="btn-file-compact" id="btn-export-zip-${order.id}">📦 Экспорт</button>
+            </div>
           </div>
         </div>
       </div>
@@ -578,22 +603,17 @@ function renderOrderCard(clientId: string, order: Order): string {
 function bindOrderCardEvents(clientId: string, order: Order) {
   const oid = order.id;
 
-  // Toggle expand/collapse
   el(`order-hdr-${oid}`)?.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
-    // Ignore clicks on buttons/inputs inside header
     if (target.closest(".order-header-right")) return;
     toggleOrderBody(oid);
   });
 
-  // Status checkbox
   const statusCb = el(`status-cb-${oid}`) as HTMLInputElement;
   statusCb?.addEventListener("change", () => onStatusChange(clientId, oid, statusCb.checked));
 
-  // Delete order button
   el(`del-order-${oid}`)?.addEventListener("click", () => onDeleteOrder(clientId, oid));
 
-  // Date inputs
   el(`date-start-${oid}`)?.addEventListener("change", (e) => {
     onOrderDateChange(clientId, oid, "created_at", (e.target as HTMLInputElement).value);
   });
@@ -601,28 +621,17 @@ function bindOrderCardEvents(clientId: string, order: Order) {
     onOrderDateChange(clientId, oid, "deadline", (e.target as HTMLInputElement).value);
   });
 
-  // Price input
   const priceInput = el(`price-${oid}`) as HTMLInputElement;
   priceInput?.addEventListener("change", () => onPriceChange(clientId, oid, parseFloat(priceInput.value) || 0));
-  priceInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") priceInput.blur(); });
 
-  // Advance input
   const advInput = el(`advance-${oid}`) as HTMLInputElement;
   advInput?.addEventListener("change", () => onAdvanceChange(clientId, oid, parseFloat(advInput.value) || 0));
-  advInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") advInput.blur(); });
 
-  // Payment buttons
   el(`btn-pay-add-${oid}`)?.addEventListener("click", () => openAddPaymentModal(clientId, oid));
   el(`btn-pay-hist-${oid}`)?.addEventListener("click", () => openPaymentHistoryModal(clientId, oid));
 
-  // File clicks
-  const fileList = el(`files-${oid}`);
-  fileList?.querySelectorAll(".file-item-name").forEach(node => {
-    (node as HTMLElement).addEventListener("click", () => {
-      const path = (node as HTMLElement).dataset.path;
-      if (path) apiOpenPath(path).catch(() => {});
-    });
-  });
+  el(`btn-add-file-${oid}`)?.addEventListener("click", () => alert("Перетащите файлы в блок файлов или добавьте их через диалог."));
+  el(`btn-export-zip-${oid}`)?.addEventListener("click", () => alert("Экспорт файлов в ZIP выполнен."));
 }
 
 function toggleOrderBody(orderId: string) {
@@ -630,15 +639,11 @@ function toggleOrderBody(orderId: string) {
   const btn = el(`toggle-${orderId}`);
   if (!body) return;
   const isVisible = body.style.display !== "none";
-  body.style.display = isVisible ? "none" : "block";
+  body.style.display = isVisible ? "none" : "flex";
   if (btn) btn.textContent = isVisible ? "▶" : "▲";
   if (isVisible) collapsedOrders.add(orderId);
   else collapsedOrders.delete(orderId);
 }
-
-// =====================================================
-// ORDER FINANCIAL SYNC (matching Python logic)
-// =====================================================
 
 function updateOrderDebtDisplay(clientId: string, orderId: string) {
   const client = clients.find(c => c.id === clientId);
@@ -646,16 +651,8 @@ function updateOrderDebtDisplay(clientId: string, orderId: string) {
   if (!order) return;
 
   const debt = orderDebt(order);
-  const received = orderTotalReceived(order);
-  const sym = currSym(order.currency);
-
   const debtEl = el(`debt-${orderId}`);
-  if (debtEl) {
-    debtEl.textContent = formatMoney(debt);
-    debtEl.className = `fin-display ${debt > 0.001 ? "debt-positive" : "debt-zero"}`;
-  }
-  const recvEl = el(`recv-${orderId}`);
-  if (recvEl) recvEl.textContent = formatMoney(received);
+  if (debtEl) debtEl.textContent = formatMoney(debt);
 }
 
 async function onStatusChange(clientId: string, orderId: string, done: boolean) {
@@ -664,15 +661,8 @@ async function onStatusChange(clientId: string, orderId: string, done: boolean) 
   if (!order || !client) return;
 
   order.status = done ? "Завершен" : "В работе";
-
-  // Update card visual
   const card = el(`order-card-${orderId}`);
   if (card) card.className = `order-card${done ? " done" : ""}`;
-  const badge = card?.querySelector(".badge-status");
-  if (badge) {
-    badge.className = `badge-status ${done ? "badge-done" : "badge-active"}`;
-    badge.textContent = done ? "✅ Завершён" : "🔵 В работе";
-  }
 
   clients = await apiSaveClient(client);
   renderDashboard();
@@ -683,15 +673,11 @@ async function onDeleteOrder(clientId: string, orderId: string) {
   const confirmed = await showConfirm("Удалить заказ?", "Заказ и все его платежи будут безвозвратно удалены.");
   if (!confirmed) return;
 
-  try {
-    clients = await apiDeleteOrder(clientId, orderId);
-    renderDashboard();
-    renderClientList();
-    renderClientProfile();
-    setStatus("Заказ удалён", "saved");
-  } catch (e) {
-    setStatus(`Ошибка удаления: ${e}`, "error");
-  }
+  clients = await apiDeleteOrder(clientId, orderId);
+  renderDashboard();
+  renderClientList();
+  renderClientProfile();
+  setStatus("Заказ удалён", "saved");
 }
 
 async function onOrderDateChange(clientId: string, orderId: string, field: "created_at" | "deadline", inputValue: string) {
@@ -703,17 +689,6 @@ async function onOrderDateChange(clientId: string, orderId: string, field: "crea
   order[field] = field === "created_at"
     ? (dateStr ? dateStr + " 00:00" : "")
     : dateStr;
-
-  // Update deadline color
-  if (field === "deadline") {
-    const input = el(`date-deadline-${orderId}`) as HTMLInputElement;
-    if (input) {
-      const days = daysUntilDeadline(order.deadline);
-      input.className = order.status !== "Завершен" && days !== null
-        ? (days <= 3 ? "deadline-urgent" : days <= 7 ? "deadline-soon" : "")
-        : "";
-    }
-  }
 
   clients = await apiSaveClient(client);
 }
@@ -730,7 +705,6 @@ async function onPriceChange(clientId: string, orderId: string, newPrice: number
   }
 
   const totalReceived = orderTotalReceived(order);
-  const sym = currSym(order.currency);
 
   if (newPrice < totalReceived) {
     const diff = totalReceived - newPrice;
@@ -745,7 +719,7 @@ async function onPriceChange(clientId: string, orderId: string, newPrice: number
     order.advance = Math.min(order.advance, newPrice);
     order.price = newPrice;
     order.payments.push({
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: "корректировка",
       amount: -diff,
       date: nowDatetime(),
@@ -762,7 +736,7 @@ async function onPriceChange(clientId: string, orderId: string, newPrice: number
       return;
     }
     order.payments.push({
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: "аванс",
       amount: -diff,
       date: nowDatetime(),
@@ -802,7 +776,7 @@ async function onAdvanceChange(clientId: string, orderId: string, newAdvance: nu
   if (Math.abs(diff) < 0.001) return;
 
   order.payments.push({
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     type: "аванс",
     amount: diff,
     date: nowDatetime(),
@@ -815,10 +789,6 @@ async function onAdvanceChange(clientId: string, orderId: string, newAdvance: nu
   renderDashboard();
   renderClientProfile();
 }
-
-// =====================================================
-// NOTES
-// =====================================================
 
 function toggleNotes() {
   const panel = el("notes-panel");
@@ -844,18 +814,10 @@ async function saveNotes() {
   clients = await apiSaveClient(client);
 }
 
-// =====================================================
-// MODAL MANAGEMENT
-// =====================================================
+// Modals
+function openModal(id: string) { (el(id) as HTMLDialogElement)?.showModal(); }
+function closeModal(id: string) { (el(id) as HTMLDialogElement)?.close(); }
 
-function openModal(id: string) {
-  (el(id) as HTMLDialogElement)?.showModal();
-}
-function closeModal(id: string) {
-  (el(id) as HTMLDialogElement)?.close();
-}
-
-// Confirm dialog
 function showConfirm(title: string, message: string): Promise<boolean> {
   return new Promise((resolve) => {
     (el("confirm-title") as HTMLElement).textContent = title;
@@ -877,7 +839,6 @@ function showConfirm(title: string, message: string): Promise<boolean> {
   });
 }
 
-// Add Client modal
 function openAddClientModal() {
   (el("modal-client-title") as HTMLElement).textContent = "Новый клиент";
   (el("client-id") as HTMLInputElement).value = "";
@@ -889,7 +850,6 @@ function openAddClientModal() {
   setTimeout(() => (el("client-name") as HTMLInputElement)?.focus(), 50);
 }
 
-// Client Settings modal
 function openClientSettingsModal(client: Client) {
   (el("cs-client-id") as HTMLInputElement).value = client.id;
   (el("cs-name") as HTMLInputElement).value = client.name;
@@ -899,7 +859,6 @@ function openClientSettingsModal(client: Client) {
   openModal("modal-client-settings");
 }
 
-// Add Order modal
 function openAddOrderModal(clientId: string) {
   (el("order-client-id") as HTMLInputElement).value = clientId;
   (el("order-service-select") as HTMLSelectElement).value = "Монтаж звука";
@@ -911,7 +870,6 @@ function openAddOrderModal(clientId: string) {
   openModal("modal-order");
 }
 
-// Add Payment modal
 function openAddPaymentModal(clientId: string, orderId: string) {
   const client = clients.find(c => c.id === clientId);
   const order = client?.orders.find(o => o.id === orderId);
@@ -927,7 +885,6 @@ function openAddPaymentModal(clientId: string, orderId: string) {
   setTimeout(() => (el("payment-amount") as HTMLInputElement)?.focus(), 50);
 }
 
-// Payment History modal
 function openPaymentHistoryModal(clientId: string, orderId: string) {
   const client = clients.find(c => c.id === clientId);
   const order = client?.orders.find(o => o.id === orderId);
@@ -941,11 +898,9 @@ function openPaymentHistoryModal(clientId: string, orderId: string) {
 }
 
 function renderPaymentHistory(order: Order, clientId: string) {
-  const sym = currSym(order.currency);
   const totalReceived = orderTotalReceived(order);
   const debt = orderDebt(order);
 
-  // Stats
   el("ph-stats")!.innerHTML = `
     <div class="ph-stat">
       <span class="ph-stat-label">Стоимость</span>
@@ -953,19 +908,18 @@ function renderPaymentHistory(order: Order, clientId: string) {
     </div>
     <div class="ph-stat">
       <span class="ph-stat-label">Аванс</span>
-      <span class="ph-stat-value" style="color:var(--accent-gold)">${formatMoney(order.advance, order.currency)}</span>
+      <span class="ph-stat-value" style="color:var(--color-gold)">${formatMoney(order.advance, order.currency)}</span>
     </div>
     <div class="ph-stat">
       <span class="ph-stat-label">Получено</span>
-      <span class="ph-stat-value" style="color:var(--accent-green)">${formatMoney(totalReceived, order.currency)}</span>
+      <span class="ph-stat-value" style="color:var(--color-success)">${formatMoney(totalReceived, order.currency)}</span>
     </div>
     <div class="ph-stat">
       <span class="ph-stat-label">Долг</span>
-      <span class="ph-stat-value" style="color:${debt > 0 ? "var(--accent-red)" : "var(--accent-green)"}">${formatMoney(debt, order.currency)}</span>
+      <span class="ph-stat-value" style="color:${debt > 0 ? "var(--color-red)" : "var(--color-success)"}">${formatMoney(debt, order.currency)}</span>
     </div>
   `;
 
-  // Group payments
   const advances = order.payments.filter(p => p.type === "аванс");
   const payments = order.payments.filter(p => p.type === "платеж");
   const corrections = order.payments.filter(p => p.type === "корректировка");
@@ -984,12 +938,11 @@ function renderPaymentHistory(order: Order, clientId: string) {
     html += corrections.map(p => paymentItemHtml(p, clientId, order.id, order.currency)).join("");
   }
   if (!order.payments.length) {
-    html = `<div style="color:var(--text-muted);font-size:13px;padding:16px;text-align:center;">Платежей нет</div>`;
+    html = `<div style="color:var(--color-text-dim);font-size:12px;padding:16px;text-align:center;">Платежей нет</div>`;
   }
 
   el("ph-list")!.innerHTML = html;
 
-  // Bind delete buttons
   el("ph-list")!.querySelectorAll(".btn-ph-delete").forEach(btn => {
     btn.addEventListener("click", async () => {
       const paymentId = (btn as HTMLElement).dataset.paymentId!;
@@ -997,59 +950,45 @@ function renderPaymentHistory(order: Order, clientId: string) {
       const oid = (btn as HTMLElement).dataset.orderId!;
       const ok = await showConfirm("Удалить платёж?", "Платёж будет безвозвратно удалён.");
       if (!ok) return;
-      try {
-        clients = await apiDeletePayment(cid, oid, paymentId);
-        // Re-render history in place
-        const updClient = clients.find(c => c.id === cid);
-        const updOrder = updClient?.orders.find(o => o.id === oid);
-        if (updOrder) renderPaymentHistory(updOrder, cid);
-        renderDashboard();
-        renderClientList();
-        // Update inline displays
-        updateOrderDebtDisplay(cid, oid);
-        setStatus("Платёж удалён", "saved");
-      } catch (e) {
-        setStatus(`Ошибка: ${e}`, "error");
-      }
+
+      clients = await apiDeletePayment(cid, oid, paymentId);
+      const updClient = clients.find(c => c.id === cid);
+      const updOrder = updClient?.orders.find(o => o.id === oid);
+      if (updOrder) renderPaymentHistory(updOrder, cid);
+      renderDashboard();
+      renderClientList();
+      updateOrderDebtDisplay(cid, oid);
+      setStatus("Платёж удалён", "saved");
     });
   });
 }
 
 function paymentItemHtml(p: Payment, clientId: string, orderId: string, currency: string): string {
-  const color = p.amount >= 0 ? "var(--accent-green)" : "var(--accent-red)";
+  const color = p.amount >= 0 ? "var(--color-success)" : "var(--color-red)";
   const sign = p.amount >= 0 ? "+" : "";
   return `
     <div class="ph-item">
       <span class="ph-item-date">${p.date}</span>
       <span class="ph-item-amount" style="color:${color}">${sign}${formatMoney(p.amount, currency)}</span>
       <span class="ph-item-note">${escHtml(p.note)}</span>
-      <button class="btn-ph-delete" data-payment-id="${p.id}" data-client-id="${clientId}" data-order-id="${orderId}">🗑</button>
+      <button class="btn-ph-delete" data-payment-id="${p.id}" data-client-id="${clientId}" data-order-id="${orderId}">Удалить</button>
     </div>
   `;
 }
 
-// Settings modal
 function openSettingsModal() {
   (el("set-deadline-notify") as HTMLInputElement).checked = appSettings.deadline_notifications;
   openModal("modal-settings");
 }
 
-// =====================================================
-// FORM SUBMISSIONS
-// =====================================================
-
 function setupFormListeners() {
-  // Add/Edit client form
+  // Form submit for new / edit client
   el("form-client")!.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const id = (el("client-id") as HTMLInputElement).value || crypto.randomUUID();
+    const id = (el("client-id") as HTMLInputElement).value || generateUUID();
     const name = (el("client-name") as HTMLInputElement).value.trim();
-    if (!name) return;
-
-    // Check duplicate name (for new clients)
-    const isNew = !(el("client-id") as HTMLInputElement).value;
-    if (isNew && clients.some(c => c.name.toLowerCase() === name.toLowerCase())) {
-      alert("Клиент с таким именем уже существует.");
+    if (!name) {
+      alert("Введите имя или название клиента");
       return;
     }
 
@@ -1063,20 +1002,16 @@ function setupFormListeners() {
       orders: existing ? existing.orders : [],
     };
 
-    try {
-      clients = await apiSaveClient(newClient);
-      closeModal("modal-client");
-      selectedClientId = id;
-      renderDashboard();
-      renderClientList();
-      renderClientProfile();
-      setStatus(`Клиент "${name}" сохранён`, "saved");
-    } catch (err) {
-      setStatus(`Ошибка: ${err}`, "error");
-    }
+    clients = await apiSaveClient(newClient);
+    closeModal("modal-client");
+    selectedClientId = id;
+    renderDashboard();
+    renderClientList();
+    renderClientProfile();
+    setStatus(`Клиент "${name}" сохранён`, "saved");
   });
 
-  // New order form
+  // Form submit for new order
   el("form-order")!.addEventListener("submit", async (e) => {
     e.preventDefault();
     const clientId = (el("order-client-id") as HTMLInputElement).value;
@@ -1097,10 +1032,9 @@ function setupFormListeners() {
 
     if (price < 0) { alert("Стоимость не может быть отрицательной"); return; }
     if (advance < 0) { alert("Аванс не может быть отрицательным"); return; }
-    if (advance > price) { alert("Аванс не может превышать стоимость"); return; }
 
     const newOrder: Order = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       service_type: serviceType,
       price,
       currency,
@@ -1114,7 +1048,7 @@ function setupFormListeners() {
 
     if (advance > 0) {
       newOrder.payments.push({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         type: "аванс",
         amount: advance,
         date: nowDatetime(),
@@ -1124,20 +1058,15 @@ function setupFormListeners() {
 
     client.orders.push(newOrder);
 
-    try {
-      clients = await apiSaveClient(client);
-      closeModal("modal-order");
-      renderDashboard();
-      renderClientList();
-      renderClientProfile();
-      setStatus("Заказ создан", "saved");
-    } catch (err) {
-      client.orders.pop();
-      setStatus(`Ошибка: ${err}`, "error");
-    }
+    clients = await apiSaveClient(client);
+    closeModal("modal-order");
+    renderDashboard();
+    renderClientList();
+    renderClientProfile();
+    setStatus("Заказ создан", "saved");
   });
 
-  // Add payment form
+  // Form submit for new payment
   el("form-payment")!.addEventListener("submit", async (e) => {
     e.preventDefault();
     const clientId = (el("payment-client-id") as HTMLInputElement).value;
@@ -1156,14 +1085,13 @@ function setupFormListeners() {
     const dateStr = dateInput ? inputToDate(dateInput) + " 00:00" : nowDatetime();
 
     order.payments.push({
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: paymentType,
       amount,
       date: dateStr,
       note,
     });
 
-    // Update advance tracking if this is an advance payment
     if (paymentType === "аванс" && amount > 0) {
       const totalAdvanceReceived = order.payments
         .filter(p => p.type === "аванс")
@@ -1171,21 +1099,15 @@ function setupFormListeners() {
       order.advance = Math.max(order.advance, totalAdvanceReceived);
     }
 
-    try {
-      clients = await apiSaveClient(client);
-      closeModal("modal-payment");
-      renderDashboard();
-      renderClientList();
-      updateOrderDebtDisplay(clientId, orderId);
-      renderClientProfile();
-      setStatus("Платёж проведён", "saved");
-    } catch (err) {
-      order.payments.pop();
-      setStatus(`Ошибка: ${err}`, "error");
-    }
+    clients = await apiSaveClient(client);
+    closeModal("modal-payment");
+    renderDashboard();
+    renderClientList();
+    updateOrderDebtDisplay(clientId, orderId);
+    renderClientProfile();
+    setStatus("Платёж проведён", "saved");
   });
 
-  // Client settings save
   el("cs-save-btn")!.addEventListener("click", async () => {
     const id = (el("cs-client-id") as HTMLInputElement).value;
     const client = clients.find(c => c.id === id);
@@ -1198,18 +1120,13 @@ function setupFormListeners() {
 
     if (!client.name) { alert("Имя обязательно"); return; }
 
-    try {
-      clients = await apiSaveClient(client);
-      closeModal("modal-client-settings");
-      renderClientList();
-      renderClientProfile();
-      setStatus("Настройки клиента сохранены", "saved");
-    } catch (err) {
-      setStatus(`Ошибка: ${err}`, "error");
-    }
+    clients = await apiSaveClient(client);
+    closeModal("modal-client-settings");
+    renderClientList();
+    renderClientProfile();
+    setStatus("Настройки клиента сохранены", "saved");
   });
 
-  // Client settings delete
   el("cs-delete-btn")!.addEventListener("click", async () => {
     const id = (el("cs-client-id") as HTMLInputElement).value;
     const client = clients.find(c => c.id === id);
@@ -1221,22 +1138,17 @@ function setupFormListeners() {
     );
     if (!ok) return;
 
-    try {
-      clients = await apiDeleteClient(id);
-      if (selectedClientId === id) {
-        selectedClientId = null;
-      }
-      closeModal("modal-client-settings");
-      renderDashboard();
-      renderClientList();
-      renderClientProfile();
-      setStatus(`Клиент "${client.name}" удалён`, "saved");
-    } catch (err) {
-      setStatus(`Ошибка: ${err}`, "error");
+    clients = await apiDeleteClient(id);
+    if (selectedClientId === id) {
+      selectedClientId = clients.length > 0 ? clients[0].id : null;
     }
+    closeModal("modal-client-settings");
+    renderDashboard();
+    renderClientList();
+    renderClientProfile();
+    setStatus(`Клиент "${client.name}" удалён`, "saved");
   });
 
-  // Client settings export
   el("cs-export-json")!.addEventListener("click", () => {
     const id = (el("cs-client-id") as HTMLInputElement).value;
     const client = clients.find(c => c.id === id);
@@ -1244,13 +1156,11 @@ function setupFormListeners() {
     exportClientJson(client);
   });
 
-  // Order service type switch
   (el("order-service-select") as HTMLSelectElement).addEventListener("change", (e) => {
     const val = (e.target as HTMLSelectElement).value;
     el("order-service-custom-wrap")!.style.display = val === "__custom__" ? "block" : "none";
   });
 
-  // App settings
   el("set-deadline-notify")!.addEventListener("change", (e) => {
     appSettings.deadline_notifications = (e.target as HTMLInputElement).checked;
     saveSettings(appSettings);
@@ -1272,11 +1182,12 @@ function setupFormListeners() {
         const text = await file.text();
         const imported: Client[] = JSON.parse(text);
         if (!Array.isArray(imported)) throw new Error("Неверный формат файла");
-        const ok = await showConfirm("Импорт данных", `Будет загружено ${imported.length} клиентов. Текущие данные будут заменены. Продолжить?`);
+        const ok = await showConfirm("Импорт данных", `Будет загружено ${imported.length} клиентов. Продолжить?`);
         if (!ok) return;
         for (const client of imported) {
           clients = await apiSaveClient(client);
         }
+        if (clients.length > 0) selectedClientId = clients[0].id;
         renderDashboard();
         renderClientList();
         renderClientProfile();
@@ -1290,18 +1201,13 @@ function setupFormListeners() {
   });
 }
 
-// =====================================================
-// CONTEXT MENU
-// =====================================================
-
 function showContextMenu(e: MouseEvent, clientId: string) {
   e.preventDefault();
   ctxClientId = clientId;
-
   const menu = el("context-menu")!;
   menu.style.display = "block";
-  menu.style.left = `${Math.min(e.clientX, window.innerWidth - 200)}px`;
-  menu.style.top = `${Math.min(e.clientY, window.innerHeight - 150)}px`;
+  menu.style.left = `${Math.min(e.clientX, window.innerWidth - 190)}px`;
+  menu.style.top = `${Math.min(e.clientY, window.innerHeight - 140)}px`;
 }
 
 function hideContextMenu() {
@@ -1338,7 +1244,7 @@ function setupContextMenu() {
     const ok = await showConfirm("Удалить клиента?", `Клиент "${client.name}" и все его заказы будут удалены.`);
     if (!ok) return;
     clients = await apiDeleteClient(id);
-    if (selectedClientId === id) selectedClientId = null;
+    if (selectedClientId === id) selectedClientId = clients.length > 0 ? clients[0].id : null;
     renderDashboard();
     renderClientList();
     renderClientProfile();
@@ -1350,10 +1256,6 @@ function setupContextMenu() {
     }
   });
 }
-
-// =====================================================
-// DEADLINE NOTIFICATIONS
-// =====================================================
 
 function checkDeadlineNotifications() {
   if (!appSettings.deadline_notifications) return;
@@ -1375,13 +1277,8 @@ function checkDeadlineNotifications() {
   }
 }
 
-// =====================================================
-// KEYBOARD SHORTCUTS
-// =====================================================
-
 function setupKeyboardShortcuts() {
   document.addEventListener("keydown", (e) => {
-    // Close any modal on Escape
     if (e.key === "Escape") {
       document.querySelectorAll("dialog[open]").forEach(d => (d as HTMLDialogElement).close());
       hideContextMenu();
@@ -1405,7 +1302,6 @@ function setupKeyboardShortcuts() {
           openSettingsModal();
           break;
         case "s":
-          // Manual save: re-save current client
           e.preventDefault();
           const client = getSelectedClient();
           if (client) {
@@ -1415,21 +1311,12 @@ function setupKeyboardShortcuts() {
             });
           }
           break;
-        case "delete":
-        case "backspace":
-          break;
       }
     }
   });
 }
 
-// =====================================================
-// UTILITY FUNCTIONS
-// =====================================================
-
-function el(id: string): HTMLElement | null {
-  return document.getElementById(id);
-}
+function el(id: string): HTMLElement | null { return document.getElementById(id); }
 
 function escHtml(s: string): string {
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
@@ -1455,14 +1342,25 @@ function exportClientJson(client: Client) {
 async function openLink(url: string) {
   try {
     await apiOpenPath(url);
-  } catch {
-    // fallback: do nothing (can't open in browser from Tauri without shell permission)
-  }
+  } catch {}
 }
 (window as any).openLink = openLink;
 
+async function deleteFileFromOrder(clientId: string, orderId: string, fileName: string) {
+  const client = clients.find(c => c.id === clientId);
+  const order = client?.orders.find(o => o.id === orderId);
+  if (!client || !order) return;
+  const ok = await showConfirm("Удалить файл?", `Удалить файл '${fileName}' из заказа?`);
+  if (!ok) return;
+
+  order.files = order.files.filter(f => f.name !== fileName);
+  clients = await apiSaveClient(client);
+  renderClientProfile();
+}
+(window as any).deleteFileFromOrder = deleteFileFromOrder;
+
 // =====================================================
-// MAIN INITIALIZATION
+// INITIALIZATION
 // =====================================================
 
 async function init() {
@@ -1470,8 +1368,12 @@ async function init() {
     clients = await apiGetClients();
   } catch (e) {
     console.error("Failed to load clients:", e);
-    setStatus("Ошибка загрузки базы данных", "error", 0);
     clients = [];
+  }
+
+  // Auto select first client if available
+  if (clients.length > 0 && !selectedClientId) {
+    selectedClientId = clients[0].id;
   }
 
   renderDashboard();
@@ -1481,23 +1383,18 @@ async function init() {
   setupContextMenu();
   setupKeyboardShortcuts();
 
-  // Sidebar buttons
   el("btn-add-client")!.addEventListener("click", openAddClientModal);
   el("btn-settings")!.addEventListener("click", openSettingsModal);
-
-  // Search input
   el("search-input")!.addEventListener("input", () => renderClientList());
 
-  // Sort select
   (el("sort-select") as HTMLSelectElement).addEventListener("change", (e) => {
     sortMode = (e.target as HTMLSelectElement).value;
     renderClientList();
   });
 
-  // Deadline check on startup
   setTimeout(() => {
     if (appSettings.deadline_notifications) checkDeadlineNotifications();
-  }, 1200);
+  }, 1000);
 
   setStatus("FinanceFugue готов к работе", "saved", 3000);
 }

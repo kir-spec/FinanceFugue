@@ -3,9 +3,20 @@
 
 [![Release](https://img.shields.io/badge/release-25.07.2026-blue.svg?style=flat-square)](https://github.com/kir-spec/FinanceFugue/releases)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg?style=flat-square)](https://www.python.org/)
-[![Framework](https://img.shields.io/badge/UI-PySide6%20(Qt%206)-green.svg?style=flat-square)](https://pypi.org/project/PySide6/)
+[![Rust](https://img.shields.io/badge/rust-2021-orange.svg?style=flat-square)](https://www.rust-lang.org/)
+[![Tauri](https://img.shields.io/badge/Tauri-v2.0-purple.svg?style=flat-square)](https://tauri.app/)
 [![License](https://img.shields.io/badge/license-Custom-orange.svg?style=flat-square)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg?style=flat-square)]()
+
+---
+
+### 📂 Repository Structure / Структура репозитория
+
+This repository contains **two complete implementations** of FinanceFugue:
+
+1. 🐍 **[`/FinanceFugue`](file:///E:/coding/client_manager/FinanceFugue)** — **Python Edition** (PySide6 / Qt 6 + Python 3.11)
+2. 🦀 **[`/FinanceFugue_Tauri`](file:///E:/coding/client_manager/FinanceFugue_Tauri)** — **Tauri Edition** (Rust 2021 + TypeScript + HTML/CSS)
+
+Both versions share full feature parity, data compatibility (`pro_database.json`), and philosophy.
 
 ---
 

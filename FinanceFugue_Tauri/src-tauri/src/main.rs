@@ -28,8 +28,9 @@ fn main() {
             get_clients,
             save_client,
             delete_client,
+            delete_order,
+            delete_payment,
             add_payment,
-            get_dashboard_stats,
             open_path
         ])
         .run(tauri::generate_context!())

@@ -59,6 +59,7 @@ fn default_status() -> String {
     "В работе".to_string()
 }
 
+#[allow(dead_code)]
 impl Order {
     pub fn total_received(&self) -> f64 {
         self.payments.iter().map(|p| p.amount).sum()
@@ -111,6 +112,7 @@ pub struct Client {
     pub orders: Vec<Order>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DashboardStats {
     pub total_clients: usize,

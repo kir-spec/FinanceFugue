@@ -1,13 +1,36 @@
 import sys
-from PySide6.QtWidgets import QApplication
+import traceback
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from src import APP_NAME, VERSION
 from src.main_window import FinanceFugueWindow
 from src.theme import MESSAGEBOX_STYLESHEET, create_dark_palette
 from src.ui.icon_loader import load_app_icon
+from src.logger import get_logger
+
+
+def global_exception_handler(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    logger = get_logger("CrashReporter")
+    logger.critical("Необработанное исключение", exc_info=(exc_type, exc_value, exc_traceback))
+
+    error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+
+    msg_box = QMessageBox()
+    msg_box.setIcon(QMessageBox.Icon.Critical)
+    msg_box.setWindowTitle("Критическая ошибка")
+    msg_box.setText("Произошла непредвиденная ошибка. Приложение может работать нестабильно.")
+    msg_box.setInformativeText(f"{exc_type.__name__}: {exc_value}")
+    msg_box.setDetailedText(error_msg)
+    msg_box.setStyleSheet(MESSAGEBOX_STYLESHEET)
+    msg_box.exec()
 
 
 def main():
+    sys.excepthook = global_exception_handler
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(VERSION)

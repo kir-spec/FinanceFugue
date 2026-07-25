@@ -46,8 +46,8 @@ class OrdersMixin:
 
         dialog = QDialog(self)
         dialog.setWindowTitle("Новый заказ")
-        dialog.setFixedWidth(500)
-        dialog.setFixedHeight(350)
+        dialog.setMinimumWidth(500)
+        dialog.setMinimumHeight(350)
 
         dialog.setStyleSheet(NEW_ORDER_DIALOG_STYLESHEET)
 

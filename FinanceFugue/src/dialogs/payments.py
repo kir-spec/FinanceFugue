@@ -164,7 +164,8 @@ class PaymentsDialog(QDialog):
             try:
                 self.order.delete_payment(payment_id)
                 self.load_payments()
-                self.parent().save_db()
+                if hasattr(self.parent(), 'save_db'):
+                    self.parent().save_db()
                 QMessageBox.information(self, "Успех", "Платеж удален")
             except ValueError as e:
                 logger.error(f"Ошибка удаления платежа: {e}")

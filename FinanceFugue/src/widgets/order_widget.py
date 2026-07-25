@@ -48,7 +48,6 @@ class OrderWidget(OrderFinancialMixin, OrderFilesMixin, QFrame):
         self._bridge = bridge
         self.setAcceptDrops(True)  # Разрешаем drag and drop
         self.init_ui()
-        # self.update_deadline_color() # Вызов перенесен ниже, после создания deadline_edit
 
     def init_ui(self):
         self.setStyleSheet(ORDER_FRAME_STYLE)

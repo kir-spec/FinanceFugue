@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List
 
 from ..models import Client
+from ..utils.paths import user_data_path
 
 logger = logging.getLogger("Backup")
 
@@ -22,9 +23,12 @@ def sanitize_path_component(name: str) -> str:
 
 
 def backup_settings_file(    settings: dict,
-    backup_dir: str = "settings_backups",
+    backup_dir: str = None,
     keep: int = 5,
 ) -> Path:
+    if backup_dir is None:
+        backup_dir = str(user_data_path() / "settings_backups")
+
     os.makedirs(backup_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     backup_path = Path(backup_dir) / f"crm_settings_{timestamp}.json"

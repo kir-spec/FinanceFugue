@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 # --- МОДЕЛИ ДАННЫХ ---
@@ -78,7 +78,7 @@ class Order:
         return max(0.0, self.price - self.advance - self.total_payments_received - self.total_corrections_received)
 
     @property
-    def days_until_deadline(self) -> int:
+    def days_until_deadline(self) -> Optional[int]:
         """Количество дней до дедлайна"""
         if not self.deadline:
             return None

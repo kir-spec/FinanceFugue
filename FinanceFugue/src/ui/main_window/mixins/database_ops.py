@@ -314,8 +314,6 @@ class DatabaseOpsMixin:
                 return
 
         if delete_files_disk:
-            db_folder = os.path.dirname(self.storage.path)
-            attached_files_dir = os.path.join(db_folder, "attached_files")
             if os.path.exists(attached_files_dir):
                 try:
                     shutil.rmtree(attached_files_dir)

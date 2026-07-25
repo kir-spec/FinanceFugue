@@ -87,6 +87,14 @@ class ShellMixin:
         self.search_edit.setStyleSheet(SEARCH_FIELD_STYLE)
         left_layout.addWidget(self.search_edit)
 
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItems(
+            ["Имя (А-Я)", "Имя (Я-А)", "Новые заказы", "Старые заказы", "Срочные"]
+        )
+        self.sort_combo.currentIndexChanged.connect(self.sort_clients)
+        self.sort_combo.setStyleSheet(SORT_COMBO_STYLE)
+        left_layout.addWidget(self.sort_combo)
+
         self.cl_list = ClientListWidget()
         self.cl_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.cl_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -114,14 +122,6 @@ class ShellMixin:
         btn_help.clicked.connect(self.open_help)
         btn_help.setStyleSheet(SIDEBAR_BUTTON_STYLE)
         left_layout.addWidget(btn_help)
-
-        self.sort_combo = QComboBox()
-        self.sort_combo.addItems(
-            ["Имя (А-Я)", "Имя (Я-А)", "Новые заказы", "Старые заказы", "Срочные"]
-        )
-        self.sort_combo.currentIndexChanged.connect(self.sort_clients)
-        self.sort_combo.setStyleSheet(SORT_COMBO_STYLE)
-        left_layout.addWidget(self.sort_combo)
 
         self.db_info_label = QLabel(f"Клиентов: {len(self.clients)}")
         self.db_info_label.setStyleSheet(DB_INFO_LABEL_STYLE)

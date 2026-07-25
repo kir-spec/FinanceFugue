@@ -21,10 +21,15 @@ logger = get_logger("Widgets")
 
 class OrderFinancialMixin:
     def format_number(self, num):
-        """Форматирует число без точек"""
-        if num == int(num):
-            return str(int(num))
-        return str(num).rstrip('0').rstrip('.') if '.' in str(num) else str(num)
+        """Форматирует число без лишних нулей"""
+        try:
+            if num != num or num in (float('inf'), float('-inf')):  # nan / inf
+                return "0"
+            if num == int(num):
+                return str(int(num))
+            return str(round(num, 2)).rstrip('0').rstrip('.')
+        except (OverflowError, ValueError):
+            return "0"
 
     def sync_price(self):
         try:
@@ -214,7 +219,7 @@ class OrderFinancialMixin:
 
     def sync_deadline(self, qdate):
         self.order.deadline = qdate.toString("dd.MM.yyyy")
-        logger.info(f"Изменен срок заказа {self.order.id}: {self.order.deadline}")
+        logger.info("Изменен срок заказа %s: %s", self.order.id, self.order.deadline)
         self.update_deadline_color()
         self._bridge.request_save()
 
@@ -226,7 +231,7 @@ class OrderFinancialMixin:
             self.order.created_at = f"{new_date} {time_part}"
         else:
             self.order.created_at = f"{new_date} 00:00"
-        logger.info(f"Изменена дата заказа {self.order.id}: {self.order.created_at}")
+        logger.info("Изменена дата заказа %s: %s", self.order.id, self.order.created_at)
         self._bridge.request_save()
 
     def update_deadline_color(self):
@@ -341,7 +346,7 @@ class OrderFinancialMixin:
                 payment_type = type_combo.currentText()
                 
                 self.order.add_payment(amount, payment_type, note, date + " 00:00")
-                logger.info(f"Добавлен платеж: {amount} ({payment_type}) для заказа {self.order.service_type}")
+                logger.info("Добавлен платеж: %s (%s) для заказа %s", amount, payment_type, self.order.service_type)
                 self.update_financial_display()
                 self._bridge.request_save()
                 
@@ -385,7 +390,8 @@ class OrderFinancialMixin:
         msg_box.exec()
         
         if msg_box.clickedButton() == btn_delete:
-            logger.info(f"Удаление заказа: {self.order.service_type} (ID: {self.order.id})")
+            logger.info("Удаление заказа: %s (ID: %s)", self.order.service_type, self.order.id)
+
             # Находим клиента, которому принадлежит заказ
             for client in self._bridge.clients:
                 if self.order in client.orders:

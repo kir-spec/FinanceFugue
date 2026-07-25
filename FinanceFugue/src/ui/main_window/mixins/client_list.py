@@ -45,48 +45,30 @@ class ClientListMixin:
     def sort_clients(self):
         mode = self.sort_combo.currentText()
 
+        def _last_order_date(client):
+            if not client.orders:
+                return datetime.min
+            try:
+                dates = []
+                for o in client.orders:
+                    d_str = o.created_at
+                    if " " in d_str:
+                        dt = datetime.strptime(d_str, "%d.%m.%Y %H:%M")
+                    else:
+                        dt = datetime.strptime(d_str, "%d.%m.%Y")
+                    dates.append(dt)
+                return max(dates)
+            except ValueError:
+                return datetime.min
+
         if mode == "Имя (А-Я)":
             self.clients.sort(key=lambda x: x.name.lower())
         elif mode == "Имя (Я-А)":
             self.clients.sort(key=lambda x: x.name.lower(), reverse=True)
         elif mode == "Новые заказы":
-            def get_last_order_date(client):
-                if not client.orders:
-                    return datetime.min
-                try:
-                    dates = []
-                    for o in client.orders:
-                        d_str = o.created_at
-                        if " " in d_str:
-                            dt = datetime.strptime(d_str, "%d.%m.%Y %H:%M")
-                        else:
-                            dt = datetime.strptime(d_str, "%d.%m.%Y")
-                        dates.append(dt)
-                    return max(dates)
-                except ValueError:
-                    return datetime.min
-
-            self.clients.sort(key=get_last_order_date, reverse=True)
-
+            self.clients.sort(key=_last_order_date, reverse=True)
         elif mode == "Старые заказы":
-            def get_last_order_date(client):
-                if not client.orders:
-                    return datetime.min
-                try:
-                    dates = []
-                    for o in client.orders:
-                        d_str = o.created_at
-                        if " " in d_str:
-                            dt = datetime.strptime(d_str, "%d.%m.%Y %H:%M")
-                        else:
-                            dt = datetime.strptime(d_str, "%d.%m.%Y")
-                        dates.append(dt)
-                    return max(dates)
-                except ValueError:
-                    return datetime.min
-
-            self.clients.sort(key=get_last_order_date)
-
+            self.clients.sort(key=_last_order_date)
         elif mode == "Срочные":
             def get_nearest_deadline(client):
                 if not client.orders:
@@ -172,8 +154,8 @@ class ClientListMixin:
 
     def delete_client(self, clients=None):
         target_clients = []
-        if clients:
-            target_clients = clients
+        if clients is not None:
+            target_clients = list(clients)
         else:
             selected_items = self.cl_list.selectedItems()
             if selected_items:

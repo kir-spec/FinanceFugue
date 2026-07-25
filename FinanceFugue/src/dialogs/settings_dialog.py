@@ -93,7 +93,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(settings_group)
 
         legal_group = QGroupBox("Правовая информация")
-        legal_group.setObjectName("SettingsGroup")
+        legal_group.setObjectName("LegalGroup")
         legal_layout = QVBoxLayout(legal_group)
         legal_layout.setContentsMargins(10, 10, 10, 10)
 

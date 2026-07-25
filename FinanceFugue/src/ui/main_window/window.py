@@ -48,11 +48,19 @@ class FinanceFugueWindow(
             )
             sys.exit(1)
 
-        db_filename = "pro_database.json"
+        db_filename = None
         if "database_path" in self.app_settings:
             db_path = self.app_settings["database_path"]
-            if os.path.exists(db_path):
-                db_filename = os.path.join(db_path, "pro_database.json")
+            db_filename = os.path.join(db_path, "pro_database.json")
+        else:
+            from pathlib import Path
+            from ...utils.paths import user_data_path
+            
+            legacy_db = Path("pro_database.json")
+            if legacy_db.exists():
+                db_filename = str(legacy_db)
+            else:
+                db_filename = str(user_data_path() / "pro_database.json")
 
         self.storage = CRMStorage(db_filename)
         self._instance_lock = InstanceLock(self.storage.path.with_suffix(".lock"))

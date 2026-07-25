@@ -2,17 +2,20 @@ import logging
 import os
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-LOGS_DIR = "logs"
-if not os.path.exists(LOGS_DIR):
-    os.makedirs(LOGS_DIR)
+from .utils.paths import user_data_path
 
-log_filename = os.path.join(LOGS_DIR, f"crm_{datetime.now().strftime('%Y-%m-%d')}.log")
+LOGS_DIR = user_data_path() / "logs"
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+log_filename = LOGS_DIR / f"crm_{datetime.now().strftime('%Y-%m-%d')}.log"
 
 _level = logging.DEBUG if os.environ.get("FINANCEFUGUE_DEBUG") else logging.INFO
 
 _file_handler = RotatingFileHandler(
-    log_filename,
+    str(log_filename),
+
     maxBytes=2 * 1024 * 1024,
     backupCount=5,
     encoding="utf-8",

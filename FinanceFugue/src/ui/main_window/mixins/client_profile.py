@@ -25,6 +25,7 @@ from ....theme import (
 from ....ui.dashboard import create_client_stats_widget
 from ....widgets import OrderWidget
 
+
 class ClientProfileMixin:
     def clear_profile_layout(self):
         while self.profile_layout.count():

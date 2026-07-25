@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinanceFugue Pro</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div id="app" class="app-layout">
+    <!-- Сайдбар -->
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-icon">💼</span>
+        <div class="brand-text">
+          <h1>FinanceFugue</h1>
+          <span class="badge-tag">Tauri Edition</span>
+        </div>
+      </div>
+
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="🔍 Поиск клиентов..." />
+      </div>
+
+      <div class="sidebar-header">
+        <h2>Клиенты</h2>
+        <button id="btn-add-client" class="btn btn-sm btn-primary">+ Новый</button>
+      </div>
+
+      <div id="client-list" class="client-list">
+        <!-- Список клиентов подгружается через JS -->
+      </div>
+    </aside>
+
+    <!-- Основной контент -->
+    <main class="main-content">
+      <!-- Дашборд статистики -->
+      <section class="dashboard-grid">
+        <div class="stat-card">
+          <span class="stat-icon">👥</span>
+          <div class="stat-info">
+            <span class="stat-label">Всего клиентов</span>
+            <span id="stat-clients" class="stat-value">0</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">📦</span>
+          <div class="stat-info">
+            <span class="stat-label">Активных заказов</span>
+            <span id="stat-orders" class="stat-value">0</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">💰</span>
+          <div class="stat-info">
+            <span class="stat-label">Общая выручка</span>
+            <span id="stat-revenue" class="stat-value">0 ₽</span>
+          </div>
+        </div>
+        <div class="stat-card stat-alert">
+          <span class="stat-icon">⚠️</span>
+          <div class="stat-info">
+            <span class="stat-label">Общий долг</span>
+            <span id="stat-debt" class="stat-value">0 ₽</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Детали выбранного клиента -->
+      <section id="client-detail" class="client-detail">
+        <div class="empty-state">
+          <span>👈 Выберите клиента из списка слева</span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Модальное окно добавления/редактирования клиента -->
+  <dialog id="modal-client" class="modal">
+    <div class="modal-content">
+      <h3 id="modal-client-title">Новый клиент</h3>
+      <form id="form-client">
+        <input type="hidden" id="client-id" />
+        <div class="form-group">
+          <label>ФИО / Название:</label>
+          <input type="text" id="client-name" required placeholder="ООО 'Вектор' или Иван Иванов" />
+        </div>
+        <div class="form-group">
+          <label>Email:</label>
+          <input type="email" id="client-email" placeholder="client@example.com" />
+        </div>
+        <div class="form-group">
+          <label>Ссылка / Соцсеть:</label>
+          <input type="text" id="client-social" placeholder="https://t.me/username" />
+        </div>
+        <div class="form-group">
+          <label>Заметки:</label>
+          <textarea id="client-notes" rows="3" placeholder="Особые пожелания..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-client').close()">Отмена</button>
+          <button type="submit" class="btn btn-primary">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Модальное окно добавления заказа -->
+  <dialog id="modal-order" class="modal">
+    <div class="modal-content">
+      <h3>Новый заказ</h3>
+      <form id="form-order">
+        <input type="hidden" id="order-client-id" />
+        <div class="form-group">
+          <label>Тип услуги / Название проекта:</label>
+          <input type="text" id="order-service" required placeholder="Дизайн мобильного приложения" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Стоимость:</label>
+            <input type="number" id="order-price" step="0.01" required value="10000" />
+          </div>
+          <div class="form-group">
+            <label>Валюта:</label>
+            <select id="order-currency">
+              <option value="RUB">RUB (₽)</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Требуемый аванс:</label>
+            <input type="number" id="order-advance" step="0.01" value="3000" />
+          </div>
+          <div class="form-group">
+            <label>Дедлайн:</label>
+            <input type="text" id="order-deadline" placeholder="31.12.2026" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-order').close()">Отмена</button>
+          <button type="submit" class="btn btn-primary">Создать заказ</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Модальное окно платежа -->
+  <dialog id="modal-payment" class="modal">
+    <div class="modal-content">
+      <h3>Внести платёж / аванс</h3>
+      <form id="form-payment">
+        <input type="hidden" id="payment-client-id" />
+        <input type="hidden" id="payment-order-id" />
+        <div class="form-group">
+          <label>Тип платежа:</label>
+          <select id="payment-type">
+            <option value="аванс">Аванс</option>
+            <option value="платеж" selected>Оплата заказа</option>
+            <option value="корректировка">Корректировка</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Сумма:</label>
+          <input type="number" id="payment-amount" step="0.01" required placeholder="5000" />
+        </div>
+        <div class="form-group">
+          <label>Примечание:</label>
+          <input type="text" id="payment-note" placeholder="Оплата по счёту №12" />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-payment').close()">Отмена</button>
+          <button type="submit" class="btn btn-primary">Провести платёж</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

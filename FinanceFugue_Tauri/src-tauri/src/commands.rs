@@ -1,4 +1,4 @@
-use crate::models::{Client, DashboardStats, Order, Payment};
+use crate::models::{Client, DashboardStats, Payment};
 use crate::storage::StorageManager;
 use std::sync::{Arc, Mutex};
 use tauri::State;

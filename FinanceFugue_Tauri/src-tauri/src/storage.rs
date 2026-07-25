@@ -1,7 +1,7 @@
 use crate::models::Client;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use fs2::FileExt;
 use tracing::{info, error, warn};
 

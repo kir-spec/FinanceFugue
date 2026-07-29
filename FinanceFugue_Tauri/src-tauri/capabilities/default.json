@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Default capabilities for FinanceFugue windows",
-  "windows": ["main", "settings", "eula"],
+  "windows": ["main", "settings", "eula", "cs"],
   "permissions": [
     "core:default",
     "core:window:default",

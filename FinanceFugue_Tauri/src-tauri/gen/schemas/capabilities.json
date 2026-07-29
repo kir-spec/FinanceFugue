@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capabilities for FinanceFugue windows","local":true,"windows":["main","settings","eula"],"permissions":["core:default","core:window:default","core:event:default","dialog:default"]}}
+{"default":{"identifier":"default","description":"Default capabilities for FinanceFugue windows","local":true,"windows":["main","settings","eula","cs"],"permissions":["core:default","core:window:default","core:event:default","dialog:default"]}}

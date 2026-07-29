@@ -192,6 +192,38 @@
     </div>
   </div>
 
+  <!-- ==================== СТРАНИЦА НАСТРОЕК КЛИЕНТА (отдельное окно) ==================== -->
+  <div id="cs-page" style="display:none">
+    <div class="settings-window">
+      <div class="settings-window-header">
+        <h3 id="cs-title">Настройки клиента</h3>
+        <button class="modal-close" id="cs-close-btn">✕</button>
+      </div>
+      <div class="settings-window-body">
+        <input type="hidden" id="cs-page-id" />
+        <div class="form-group"><label>Имя:</label><input type="text" id="cs-page-name" required /></div>
+        <div class="form-group"><label>Email:</label><input type="email" id="cs-page-email" /></div>
+        <div class="form-group"><label>Соцсеть / Ссылка:</label><input type="text" id="cs-page-social" /></div>
+        <div class="form-group"><label>Заметки:</label><textarea id="cs-page-notes" rows="3"></textarea></div>
+        <div class="settings-section">
+          <div class="settings-section-title">Инструменты экспорта</div>
+          <div class="settings-btns-row">
+            <button class="btn btn-secondary" id="cs-export-json-btn" type="button">📊 Экспорт заказов (JSON)</button>
+            <button class="btn btn-secondary" id="cs-export-files-btn" type="button">📦 Экспорт файлов (ZIP)</button>
+            <button class="btn btn-secondary" id="cs-export-date-btn" type="button">📅 По датам (ZIP)</button>
+          </div>
+        </div>
+        <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:6px">
+          <button type="button" class="btn btn-danger" id="cs-page-delete">🗑 Удалить клиента</button>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-ghost" id="cs-page-cancel">Отмена</button>
+            <button type="button" class="btn btn-primary" id="cs-page-save">💾 Сохранить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== КОНТЕКСТНОЕ МЕНЮ ==================== -->
   <div id="context-menu" class="context-menu" style="display:none;">
     <div class="cm-item" id="cm-add-order">➕ Добавить заказ</div>

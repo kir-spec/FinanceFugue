@@ -1111,12 +1111,83 @@ function openAddClientModal() {
 
 function openClientSettingsModal(client: Client) {
   console.log(`UI openClientSettingsModal: client=${client.id} "${client.name}"`);
-  (el("cs-client-id") as HTMLInputElement).value = client.id;
-  (el("cs-name") as HTMLInputElement).value = client.name;
-  (el("cs-email") as HTMLInputElement).value = client.email;
-  (el("cs-social") as HTMLInputElement).value = client.social_link;
-  (el("cs-notes") as HTMLTextAreaElement).value = client.notes;
-  openModal("modal-client-settings");
+  invoke("set_pending_client_id", { id: client.id })
+    .then(() => invoke("open_client_settings_window", { clientId: client.id }))
+    .catch(e => console.error("Failed to open client settings:", e));
+}
+
+async function initCSWindow() {
+  console.log("=== CS Window Init ===");
+  document.body.style.background = "#1E1E1E";
+  document.body.style.color = "#FFFFFF";
+  document.querySelectorAll("#lock-screen, #main-app, dialog, #settings-page, #eula-page").forEach(el => {
+    try { (el as HTMLElement).style.display = "none"; } catch {}
+  });
+  const sp = document.getElementById("cs-page");
+  if (!sp) return;
+  sp.style.display = "block";
+  sp.style.background = "#1E1E1E";
+  sp.style.minHeight = "100vh";
+
+  // Get client ID from IPC
+  let client: Client | undefined;
+  try {
+    const cid = await invoke<string | null>("get_pending_client_id");
+    if (cid) {
+      const all = await invoke<Client[]>("get_clients");
+      client = all.find(c => c.id === cid);
+    }
+  } catch (e) { console.warn("Failed to load client:", e); }
+
+  if (!client) {
+    sp.innerHTML = '<div style="padding:40px;color:white"><h2>Ошибка</h2><p>Клиент не найден.</p></div>';
+    return;
+  }
+
+  // Fill form
+  (document.getElementById("cs-page-id") as HTMLInputElement).value = client.id;
+  (document.getElementById("cs-page-name") as HTMLInputElement).value = client.name;
+  (document.getElementById("cs-page-email") as HTMLInputElement).value = client.email;
+  (document.getElementById("cs-page-social") as HTMLInputElement).value = client.social_link;
+  (document.getElementById("cs-page-notes") as HTMLTextAreaElement).value = client.notes;
+  document.getElementById("cs-title")!.textContent = `Настройки: ${client.name}`;
+
+  // Close button
+  document.getElementById("cs-close-btn")?.addEventListener("click", () => getCurrentWindow().close().catch(() => {}));
+  document.getElementById("cs-page-cancel")?.addEventListener("click", () => getCurrentWindow().close().catch(() => {}));
+
+  // Save
+  document.getElementById("cs-page-save")?.addEventListener("click", async () => {
+    client!.name = (document.getElementById("cs-page-name") as HTMLInputElement).value.trim();
+    client!.email = (document.getElementById("cs-page-email") as HTMLInputElement).value.trim();
+    client!.social_link = (document.getElementById("cs-page-social") as HTMLInputElement).value.trim();
+    client!.notes = (document.getElementById("cs-page-notes") as HTMLTextAreaElement).value;
+    if (!client!.name) { alert("Введите имя клиента"); return; }
+    try {
+      clients = await apiSaveClient(client!);
+      getCurrentWindow().close().catch(() => {});
+    } catch (e) { alert(`Ошибка сохранения: ${e}`); }
+  });
+
+  // Delete
+  document.getElementById("cs-page-delete")?.addEventListener("click", async () => {
+    const ok = await showConfirm("Удалить клиента", `Удалить «${client!.name}» и все его заказы?`);
+    if (!ok) return;
+    try {
+      clients = await apiDeleteClient(client!.id);
+      getCurrentWindow().close().catch(() => {});
+    } catch (e) { alert(`Ошибка: ${e}`); }
+  });
+
+  // Export buttons
+  document.getElementById("cs-export-json-btn")?.addEventListener("click", () => exportSelectedOrders(client!.id));
+  document.getElementById("cs-export-files-btn")?.addEventListener("click", () => exportClientFilesZip(client!.id));
+  document.getElementById("cs-export-date-btn")?.addEventListener("click", () => exportClientFilesByDate(client!.id));
+
+  // Load all clients
+  try { clients = await invoke<Client[]>("get_clients"); } catch {}
+
+  console.log("=== CS Window Ready ===");
 }
 
 function openAddOrderModal(clientId: string) {
@@ -2499,6 +2570,14 @@ async function renameFileInOrder(clientId: string, orderId: string, oldName: str
 // =====================================================
 
 async function init() {
+  try { console.log("=== Init — label:", getCurrentWindow().label, "==="); } catch {}
+
+  // Route to correct window initializer
+  const lbl = getCurrentWindow().label;
+  if (lbl === "settings") { initSettingsWindow(); return; }
+  if (lbl === "eula") { initEulaWindow(); return; }
+  if (lbl === "cs") { initCSWindow(); return; }
+
   console.log("=== FinanceFugue Initialization Start ===");
   try {
     const isLocked = await invoke<boolean>("has_password");
@@ -2594,205 +2673,171 @@ async function continueInit() {
 
 function initSettingsWindow() {
   console.log("=== Settings Window Init ===");
-  el("lock-screen")!.style.display = "none";
-  el("main-app")!.style.display = "none";
-  const sp = el("settings-page")!;
+  document.body.style.background = "#1E1E1E";
+  document.body.style.color = "#FFFFFF";
+
+  // Hide everything that's not settings
+  const toHide = document.querySelectorAll("#lock-screen, #main-app, dialog, .context-menu, #context-menu, #eula-page");
+  toHide.forEach(el => { try { (el as HTMLElement).style.display = "none"; } catch {} });
+
+  // Show settings page
+  const sp = document.getElementById("settings-page");
+  if (!sp) { document.body.innerHTML = '<div style="padding:40px;color:white"><h2>⚙ Настройки</h2><p>Ошибка загрузки контента.</p></div>'; return; }
   sp.style.display = "block";
   sp.style.background = "#1E1E1E";
   sp.style.minHeight = "100vh";
 
-  const closeBtn = el("settings-close-btn");
-  if (closeBtn) {
-    closeBtn.addEventListener("click", () => {
-      getCurrentWindow().close().catch(e => console.error("close error:", e));
-    });
-  }
+  // Wire close button
+  const closeBtn = document.getElementById("settings-close-btn");
+  if (closeBtn) closeBtn.addEventListener("click", () => { try { getCurrentWindow().close(); } catch {} });
 
-  invoke<string>("get_db_dir").then(dir => {
-    (el("set-db-path") as HTMLInputElement).value = dir;
-  }).catch(e => console.error("Failed to get DB dir:", e));
+  // Async: fill data without blocking UI
+  setTimeout(async () => {
+    try {
+      const dir = await invoke<string>("get_db_dir");
+      const dbPath = document.getElementById("set-db-path") as HTMLInputElement;
+      if (dbPath) dbPath.value = dir;
+    } catch (e) { console.warn("get_db_dir failed:", e); }
 
-  invoke<Client[]>("get_clients").then(c => {
-    clients = c;
-    console.log(`settings: loaded ${clients.length} clients`);
-  }).catch(e => console.error("Failed to load clients:", e));
+    try {
+      clients = await invoke<Client[]>("get_clients");
+      console.log(`settings: loaded ${clients.length} clients`);
+    } catch (e) { console.warn("get_clients failed:", e); }
 
-  el("set-deadline-notify")!.addEventListener("change", (e) => {
+    try { updateDbSizeDisplay(); } catch {}
+  }, 50);
+
+  // Checkbox state
+  try {
+    const cb = document.getElementById("set-deadline-notify") as HTMLInputElement;
+    if (cb) cb.checked = appSettings.deadline_notifications;
+  } catch {}
+
+  // File storage mode
+  try {
+    const fs = document.getElementById("set-file-storage-mode") as HTMLSelectElement;
+    if (fs) fs.value = appSettings.file_storage_mode;
+  } catch {}
+
+  // Event listeners — all with null checks
+  const on = (id: string, event: string, fn: EventListener) => {
+    document.getElementById(id)?.addEventListener(event, fn);
+  };
+
+  on("set-deadline-notify", "change", (e) => {
     appSettings.deadline_notifications = (e.target as HTMLInputElement).checked;
     saveSettings(appSettings);
   });
 
-  const fileModeSelect = el("set-file-storage-mode") as HTMLSelectElement;
-  if (fileModeSelect) {
-    fileModeSelect.value = appSettings.file_storage_mode;
-    fileModeSelect.addEventListener("change", (e) => {
+  const fileModeSel = document.getElementById("set-file-storage-mode") as HTMLSelectElement;
+  if (fileModeSel) {
+    fileModeSel.addEventListener("change", (e) => {
       appSettings.file_storage_mode = (e.target as HTMLSelectElement).value as "copy" | "link";
       saveSettings(appSettings);
-      setStatus(`Режим файлов: ${appSettings.file_storage_mode === "copy" ? "копирование" : "ссылка"}`, "saved");
     });
   }
 
   // Password management
-  el("set-change-password")?.addEventListener("click", async () => {
-    const hasPwd = await invoke<boolean>("has_password");
-    if (hasPwd) {
-      const oldPwd = prompt("Введите текущий пароль:");
+  on("set-change-password", "click", async () => {
+    try {
+      const hasPwd = await invoke<boolean>("has_password");
+      if (hasPwd) {
+        const oldPwd = prompt("Введите текущий пароль:");
+        if (!oldPwd) return;
+        const valid = await invoke<boolean>("check_password", { password: oldPwd });
+        if (!valid) { alert("Неверный пароль."); return; }
+      }
+      const newPwd = prompt("Введите новый пароль:");
+      if (newPwd) { await invoke("set_password", { password: newPwd }); alert("Пароль успешно установлен."); }
+    } catch (e) { console.error(e); }
+  });
+
+  on("set-remove-password", "click", async () => {
+    try {
+      const hasPwd = await invoke<boolean>("has_password");
+      if (!hasPwd) { alert("Пароль не установлен."); return; }
+      const oldPwd = prompt("Введите текущий пароль для отключения защиты:");
       if (!oldPwd) return;
       const valid = await invoke<boolean>("check_password", { password: oldPwd });
-      if (!valid) {
-        alert("Неверный пароль.");
-        return;
-      }
-    }
-    const newPwd = prompt("Введите новый пароль:");
-    if (newPwd) {
-      await invoke("set_password", { password: newPwd });
-      alert("Пароль успешно установлен.");
-    }
+      if (!valid) { alert("Неверный пароль."); return; }
+      await invoke("set_password", { password: null }); alert("Защита паролем отключена.");
+    } catch (e) { console.error(e); }
   });
 
-  el("set-remove-password")?.addEventListener("click", async () => {
-    const hasPwd = await invoke<boolean>("has_password");
-    if (!hasPwd) {
-      alert("Пароль не установлен.");
-      return;
-    }
-    const oldPwd = prompt("Введите текущий пароль для отключения защиты:");
-    if (!oldPwd) return;
-    const valid = await invoke<boolean>("check_password", { password: oldPwd });
-    if (!valid) {
-      alert("Неверный пароль.");
-      return;
-    }
-    await invoke("set_password", { password: null });
-    alert("Защита паролем отключена.");
-  });
-
-
-  el("set-browse-db")!.addEventListener("click", async () => {
+  // Browse DB
+  on("set-browse-db", "click", async () => {
     try {
       const selected = await open({ directory: true, multiple: false, title: "Выберите папку для хранения БД" });
       if (selected) {
         await invoke("save_db_dir", { dir: selected });
-        (el("set-db-path") as HTMLInputElement).value = selected;
+        const inp = document.getElementById("set-db-path") as HTMLInputElement;
+        if (inp) inp.value = selected;
         setStatus("Путь к БД сохранён. Перезапустите программу.", "saved");
       }
-    } catch (e) {
-      console.error("set-browse-db error:", e);
-    }
+    } catch (e) { console.error(e); }
   });
 
-  el("set-export-json")!.addEventListener("click", () => {
+  on("set-export-json", "click", () => {
     const json = JSON.stringify(clients, null, 2);
     downloadFile("financefugue_export.json", json, "application/json");
   });
 
-  el("set-backup-zip")!.addEventListener("click", async () => {
-    const filePaths: string[] = [];
-    for (const c of clients) {
-      for (const o of c.orders) {
-        for (const f of o.files) {
-          if (f.path && !filePaths.includes(f.path)) filePaths.push(f.path);
-        }
-      }
-    }
-    const dbJson = JSON.stringify(clients, null, 2);
+  on("set-backup-zip", "click", async () => {
     try {
-      const zipData = await invoke<number[]>("create_backup_zip", { filePaths, dbJson });
-      await downloadBlob(`financefugue_backup_${Date.now()}.zip`, zipData, "application/zip");
+      const fp: string[] = [];
+      for (const c of clients) for (const o of c.orders) for (const f of o.files) if (f.path && !fp.includes(f.path)) fp.push(f.path);
+      const z = await invoke<number[]>("create_backup_zip", { filePaths: fp, dbJson: JSON.stringify(clients, null, 2) });
+      await downloadBlob(`financefugue_backup_${Date.now()}.zip`, z, "application/zip");
       setStatus("Бэкап ZIP создан", "saved");
-    } catch (e) {
-      console.error(`exportFullBackup error:`, e);
-      setStatus(`Ошибка бэкапа: ${e}`, "error");
-    }
+    } catch (e) { setStatus(`Ошибка: ${e}`, "error"); }
   });
 
-  el("set-import-folder")!.addEventListener("click", () => {
-    importFromFolder();
-  });
+  on("set-import-folder", "click", () => { importFromFolder(); });
 
-  el("set-delete-files")!.addEventListener("click", async () => {
-    const choice = await showConfirm("Удалить все файлы", "Файлы будут удалены с диска. Продолжить?");
-    if (!choice) return;
-    let deletedCount = 0;
-    let failedCount = 0;
+  on("set-delete-files", "click", async () => {
+    const ok = await showConfirm("Удалить все файлы", "Файлы будут удалены с диска. Продолжить?");
+    if (!ok) return;
+    let del = 0, fail = 0;
     for (const c of clients) {
       for (const o of c.orders) {
-        const remainingFiles: ProjectFile[] = [];
+        const keep: ProjectFile[] = [];
         for (const f of o.files) {
-          try {
-            await invoke("delete_file", { path: f.path });
-            deletedCount++;
-          } catch (err) {
-            console.warn(`Failed to delete file ${f.path}:`, err);
-            failedCount++;
-            remainingFiles.push(f);
-          }
+          try { await invoke("delete_file", { path: f.path }); del++; } catch { fail++; keep.push(f); }
         }
-        o.files = remainingFiles;
+        o.files = keep;
       }
     }
-    for (const c of clients) {
-      clients = await apiSaveClient(c);
-    }
-    renderClientProfile();
-    if (failedCount > 0) {
-      setStatus(`Удалено ${deletedCount} файлов, ошибок: ${failedCount}`, "error");
-    } else {
-      setStatus(`Удалено файлов: ${deletedCount}`, "saved");
-    }
+    for (const c of clients) clients = await apiSaveClient(c);
+    setStatus(fail > 0 ? `Удалено ${del}, ошибок: ${fail}` : `Удалено ${del}`, fail > 0 ? "error" : "saved");
   });
 
-  el("set-delete-db")!.addEventListener("click", async () => {
+  on("set-delete-db", "click", async () => {
     const ok = await showConfirm("Очистить базу данных", "Все данные будут безвозвратно удалены! Продолжить?");
     if (!ok) return;
     try {
-      await invoke("delete_database");
-      clients = [];
-      selectedClientId = null;
-      renderDashboard();
-      renderClientList();
-      renderClientProfile();
+      await invoke("delete_database"); clients = []; selectedClientId = null;
       setStatus("База данных очищена", "saved");
-    } catch (e) {
-      console.error("delete_database error:", e);
-      setStatus(`Ошибка очистки БД: ${e}`, "error");
-    }
+    } catch (e) { setStatus(`Ошибка: ${e}`, "error"); }
   });
 
-  el("set-import-json")!.addEventListener("click", async () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".json";
-    input.addEventListener("change", async () => {
-      const file = input.files?.[0];
-      if (!file) return;
+  on("set-import-json", "click", () => {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".json";
+    inp.addEventListener("change", async () => {
+      const f = inp.files?.[0]; if (!f) return;
       try {
-        const text = await file.text();
-        const imported: Client[] = JSON.parse(text);
-        if (!Array.isArray(imported)) throw new Error("Неверный формат файла");
-        const ok = await showConfirm("Импорт данных", `Будет загружено ${imported.length} клиентов. Продолжить?`);
+        const t = await f.text(); const imp: Client[] = JSON.parse(t);
+        if (!Array.isArray(imp)) throw new Error("Неверный формат");
+        const ok = await showConfirm("Импорт", `Будет загружено ${imp.length} клиентов. Продолжить?`);
         if (!ok) return;
         try { await invoke("backup_db", { note: "pre_import" }); } catch {}
-        for (const client of imported) {
-          clients = await apiSaveClient(client);
-        }
-        setStatus(`Импортировано ${imported.length} клиентов`, "saved");
-      } catch (err) {
-        console.error(`import-json error:`, err);
-        alert(`Ошибка импорта: ${err}`);
-      }
+        for (const c of imp) clients = await apiSaveClient(c);
+        setStatus(`Импортировано ${imp.length}`, "saved");
+      } catch (e) { alert(`Ошибка: ${e}`); }
     });
-    input.click();
+    inp.click();
   });
 
-  updateDbSizeDisplay();
   console.log("=== Settings Window Ready ===");
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  const lbl = getCurrentWindow().label;
-  if (lbl === "settings") { initSettingsWindow(); }
-  else if (lbl === "eula") { initEulaWindow(); }
-  else { init(); }
-});
+window.addEventListener("DOMContentLoaded", () => { init(); });

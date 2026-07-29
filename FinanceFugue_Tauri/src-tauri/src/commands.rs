@@ -435,6 +435,36 @@ pub fn open_eula_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// Pending client ID for separate settings window
+static PENDING_CLIENT_ID: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+#[tauri::command]
+pub fn set_pending_client_id(id: String) -> Result<(), String> {
+    *PENDING_CLIENT_ID.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_pending_client_id() -> Result<Option<String>, String> {
+    Ok(PENDING_CLIENT_ID.lock().unwrap_or_else(|e| e.into_inner()).take())
+}
+
+#[tauri::command]
+pub fn open_client_settings_window(client_id: String, app: tauri::AppHandle) -> Result<(), String> {
+    info!("IPC: open_client_settings_window — client_id={}", client_id);
+    // Store the client ID for the new window to retrieve
+    *PENDING_CLIENT_ID.lock().unwrap_or_else(|e| e.into_inner()) = Some(client_id.clone());
+    if let Some(win) = app.get_webview_window("cs") { let _ = win.close(); }
+    WebviewWindowBuilder::new(&app, "cs", WebviewUrl::App("index.html".into()))
+        .title("FinanceFugue — Настройки клиента")
+        .inner_size(480.0, 600.0)
+        .resizable(false)
+        .build()
+        .map_err(|e| { error!("open_client_settings_window — failed: {}", e); e.to_string() })?;
+    info!("open_client_settings_window — success");
+    Ok(())
+}
+
 #[tauri::command]
 pub fn read_text_file(path: String) -> Result<String, String> {
     debug!("IPC: read_text_file — path={}", path);

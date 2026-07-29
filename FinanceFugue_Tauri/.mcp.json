@@ -2,9 +2,11 @@
   "mcpServers": {
     "financefugue-mcp": {
       "command": "python",
-      "args": [
-        "E:/coding/client_manager/FinanceFugue_Tauri/financefugue_mcp.py"
-      ]
+      "args": ["E:/coding/client_manager/FinanceFugue_Tauri/financefugue_mcp.py"]
+    },
+    "codebase-memory": {
+      "command": "python",
+      "args": ["E:/coding/client_manager/FinanceFugue_Tauri/codebase_mcp.py"]
     }
   }
 }

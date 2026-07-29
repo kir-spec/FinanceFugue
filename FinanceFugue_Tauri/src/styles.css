@@ -1153,6 +1153,44 @@ dialog::backdrop { background: rgba(0,0,0,0.75); }
   margin-bottom: 4px;
 }
 
+/* About tabs */
+.about-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid var(--color-border);
+}
+.about-tab {
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  font-family: var(--font-main);
+}
+.about-tab:hover { color: var(--color-text-muted); }
+.about-tab.active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+.about-tab-content { min-height: 120px; }
+.about-legal-text {
+  font-size: 10px;
+  color: var(--color-text-dim);
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--color-bg-panel);
+  padding: 10px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  font-family: monospace;
+  margin: 0;
+}
+.eula-content { max-height: 400px; overflow-y: auto; }
+
 /* =====================================================
    FILE CONTEXT MENU
    ===================================================== */

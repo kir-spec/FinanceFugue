@@ -51,6 +51,7 @@ interface Client {
 
 interface AppSettings {
   deadline_notifications: boolean;
+  file_storage_mode: "copy" | "link";
 }
 
 // =====================================================
@@ -244,7 +245,7 @@ function loadSettings(): AppSettings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { deadline_notifications: true };
+  return { deadline_notifications: true, file_storage_mode: "copy" as const };
 }
 
 function saveSettings(s: AppSettings) {
@@ -613,7 +614,7 @@ function renderOrderCard(clientId: string, order: Order): string {
           <div class="fin-box">
             <label>ДОЛГ</label>
             <div class="fin-input-wrap">
-              <span class="fin-display debt-edit" id="debt-${order.id}">${formatMoney(debt)}</span>
+              <input type="number" class="fin-input debt-edit" id="debt-${order.id}" value="${debt.toFixed(2)}" step="0.01" />
               <span class="fin-currency">${sym}</span>
             </div>
           </div>
@@ -637,6 +638,7 @@ function renderOrderCard(clientId: string, order: Order): string {
             <div class="file-list">${filesListHtml}</div>
             <div class="files-actions-row">
               <button class="btn-file-compact" id="btn-add-file-${order.id}">+ Добавить</button>
+              <button class="btn-file-compact" id="btn-add-folder-${order.id}">📁 Папка</button>
               <button class="btn-file-compact" id="btn-export-zip-${order.id}">📦 Экспорт</button>
             </div>
           </div>
@@ -689,6 +691,16 @@ function bindOrderCardEvents(clientId: string, order: Order) {
     onAdvanceChange(clientId, oid, val);
   });
 
+  const debtInput = el(`debt-${oid}`) as HTMLInputElement;
+  debtInput?.addEventListener("change", () => {
+    const val = parseFloat(debtInput.value);
+    if (!isFinite(val)) {
+      debtInput.value = orderDebt(order).toFixed(2);
+      return;
+    }
+    onDebtChange(clientId, oid, val);
+  });
+
   el(`btn-pay-add-${oid}`)?.addEventListener("click", () => openAddPaymentModal(clientId, oid));
   el(`btn-pay-hist-${oid}`)?.addEventListener("click", () => openPaymentHistoryModal(clientId, oid));
 
@@ -710,18 +722,24 @@ function bindOrderCardEvents(clientId: string, order: Order) {
         console.warn(`btn-add-file: client/order not found`);
         return;
       }
-      console.log(`btn-add-file: ${files.length} file(s) selected`);
+      console.log(`btn-add-file: ${files.length} file(s) selected, mode=${appSettings.file_storage_mode}`);
       let added = 0;
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         const targetDir = `${dbDir}/attached_files/${clientId}/${oid}`;
         try {
-          // Read file content in JS (Tauri v2 doesn't expose File.path)
-          const buf = await f.arrayBuffer();
-          const bytes = new Uint8Array(buf);
-          console.log(`IPC → save_file_bytes: name=${f.name}, size=${bytes.length}`);
-          const newPath = await invoke<string>("save_file_bytes", { dir: targetDir, name: f.name, content: Array.from(bytes) });
-          console.log(`IPC ← save_file_bytes: ${newPath}`);
+          let newPath: string;
+          if (appSettings.file_storage_mode === "link" && (f as any).path) {
+            const srcPath = (f as any).path as string;
+            console.log(`IPC → link_file: ${srcPath}`);
+            newPath = await invoke<string>("link_file", { source: srcPath, destDir: targetDir });
+          } else {
+            const buf = await f.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            console.log(`IPC → save_file_bytes: name=${f.name}, size=${bytes.length}`);
+            newPath = await invoke<string>("save_file_bytes", { dir: targetDir, name: f.name, content: Array.from(bytes) });
+          }
+          console.log(`IPC ← file saved: ${newPath}`);
           order.files.push({ path: newPath, name: f.name, is_finished: false, is_folder: false });
           added++;
         } catch (e) {
@@ -738,6 +756,29 @@ function bindOrderCardEvents(clientId: string, order: Order) {
     input.click();
   });
   el(`btn-export-zip-${oid}`)?.addEventListener("click", () => exportOrderFilesZip(clientId, oid));
+
+  el(`btn-add-folder-${oid}`)?.addEventListener("click", async () => {
+    console.log(`UI btn-add-folder: clientId=${clientId}, orderId=${oid}`);
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "Выберите папку для добавления" });
+      if (!selected) return;
+      const client = clients.find(c => c.id === clientId);
+      const order = client?.orders.find(o => o.id === oid);
+      if (!client || !order) return;
+      const dbDir = await invoke<string>("get_db_dir");
+      const targetDir = `${dbDir}/attached_files/${clientId}/${oid}`;
+      console.log(`IPC → add_folder_link: ${selected}`);
+      const newPath = await invoke<string>("add_folder_link", { folderPath: selected, destDir: targetDir });
+      const name = selected.split(/[/\\]/).pop() || selected;
+      order.files.push({ path: newPath, name, is_finished: false, is_folder: true });
+      clients = await apiSaveClient(client);
+      renderClientProfile();
+      setStatus(`Папка «${name}» добавлена`, "saved");
+    } catch (e) {
+      console.error("btn-add-folder error:", e);
+      alert(`Ошибка добавления папки: ${e}`);
+    }
+  });
 }
 
 function toggleOrderBody(orderId: string) {
@@ -759,7 +800,13 @@ function updateOrderDebtDisplay(clientId: string, orderId: string) {
 
   const debt = orderDebt(order);
   const debtEl = el(`debt-${orderId}`);
-  if (debtEl) debtEl.textContent = formatMoney(debt);
+  if (debtEl) {
+    if (debtEl.tagName === "INPUT") {
+      (debtEl as HTMLInputElement).value = debt.toFixed(2);
+    } else {
+      debtEl.textContent = formatMoney(debt);
+    }
+  }
   console.debug(`UI updateOrderDebtDisplay: orderId=${orderId}, debt=${debt}`);
 }
 
@@ -920,6 +967,62 @@ async function onAdvanceChange(clientId: string, orderId: string, newAdvance: nu
     });
   }
   order.advance = newAdvance;
+
+  updateOrderDebtDisplay(clientId, orderId);
+  clients = await apiSaveClient(client);
+  renderDashboard();
+  renderClientProfile();
+}
+
+async function onDebtChange(clientId: string, orderId: string, newDebt: number) {
+  console.log(`UI onDebtChange: orderId=${orderId}, newDebt=${newDebt}`);
+  const client = clients.find(c => c.id === clientId);
+  const order = client?.orders.find(o => o.id === orderId);
+  if (!order || !client) {
+    console.warn(`onDebtChange: client/order not found`);
+    return;
+  }
+
+  const currentDebt = orderDebt(order);
+  const diff = newDebt - currentDebt;
+  if (Math.abs(diff) < 0.01) {
+    (el(`debt-${orderId}`) as HTMLInputElement).value = currentDebt.toFixed(2);
+    return;
+  }
+
+  if (diff > 0) {
+    const ok = await showConfirm(
+      "Изменение долга",
+      `Долг увеличится на ${formatMoney(diff, order.currency)}. Будет добавлена корректировка. Продолжить?`
+    );
+    if (!ok) {
+      (el(`debt-${orderId}`) as HTMLInputElement).value = currentDebt.toFixed(2);
+      return;
+    }
+    order.payments.push({
+      id: generateUUID(),
+      type: "корректировка",
+      amount: -diff,
+      date: nowDatetime(),
+      note: "Ручная корректировка долга",
+    });
+  } else {
+    const ok = await showConfirm(
+      "Изменение долга",
+      `Долг уменьшится на ${formatMoney(-diff, order.currency)}. Будет добавлен платёж. Продолжить?`
+    );
+    if (!ok) {
+      (el(`debt-${orderId}`) as HTMLInputElement).value = currentDebt.toFixed(2);
+      return;
+    }
+    order.payments.push({
+      id: generateUUID(),
+      type: "платеж",
+      amount: -diff,
+      date: nowDatetime(),
+      note: "Ручная корректировка долга",
+    });
+  }
 
   updateOrderDebtDisplay(clientId, orderId);
   clients = await apiSaveClient(client);
@@ -1343,7 +1446,7 @@ function setupFormListeners() {
       return;
     }
     console.log(`UI cs-export-json: exporting "${client.name}"`);
-    exportClientJson(client);
+    exportSelectedOrders(id);
   });
 
   el("cs-export-files-zip")!.addEventListener("click", () => {
@@ -1355,6 +1458,17 @@ function setupFormListeners() {
     }
     console.log(`UI cs-export-files-zip: exporting files for "${client.name}"`);
     exportClientFilesZip(id);
+  });
+
+  el("cs-export-by-date")?.addEventListener("click", () => {
+    const id = (el("cs-client-id") as HTMLInputElement).value;
+    const client = clients.find(c => c.id === id);
+    if (!client) {
+      console.warn(`cs-export-by-date: client ${id} not found`);
+      return;
+    }
+    console.log(`UI cs-export-by-date: exporting by date for "${client.name}"`);
+    exportClientFilesByDate(id);
   });
 
   (el("order-service-select") as HTMLSelectElement).addEventListener("change", (e) => {
@@ -1424,6 +1538,8 @@ function setupFormListeners() {
         console.log(`  → parsed ${imported.length} clients`);
         const ok = await showConfirm("Импорт данных", `Будет загружено ${imported.length} клиентов. Продолжить?`);
         if (!ok) { console.log(`  → user cancelled`); return; }
+        // Auto-backup before import
+        try { await invoke("backup_db", { note: "pre_import" }); } catch {}
         for (const client of imported) {
           clients = await apiSaveClient(client);
         }
@@ -1622,15 +1738,6 @@ async function downloadBlob(name: string, data: number[], type: string) {
   URL.revokeObjectURL(url);
 }
 
-function exportClientJson(client: Client) {
-  console.log(`UI exportClientJson: "${client.name}"`);
-  downloadFile(
-    `${client.name.replace(/\s+/g,"_")}_orders.json`,
-    JSON.stringify({ client: { name: client.name, email: client.email }, orders: client.orders }, null, 2),
-    "application/json"
-  );
-}
-
 async function exportFullBackup() {
   console.log(`UI exportFullBackup: collecting files from ${clients.length} clients`);
   const filePaths: string[] = [];
@@ -1706,6 +1813,71 @@ async function exportClientFilesZip(clientId: string) {
     console.error(`exportClientFilesZip error:`, e);
     setStatus(`Ошибка экспорта: ${e}`, "error");
   }
+}
+
+async function exportClientFilesByDate(clientId: string) {
+  console.log(`UI exportClientFilesByDate: clientId=${clientId}`);
+  const client = clients.find(c => c.id === clientId);
+  if (!client) { setStatus("Клиент не найден", "error"); return; }
+  const filePaths: string[] = [];
+  const dateGroups: Map<string, { dir: string; paths: string[] }> = new Map();
+  for (const o of client.orders) {
+    const dateStr = (o.created_at || "").split(" ")[0] || "Без даты";
+    const safeDate = dateStr.replace(/[./]/g, "-");
+    const dirName = `${safeDate}_${o.service_type.replace(/\s+/g, "_")}`;
+    for (const f of o.files) {
+      if (f.path) {
+        if (!dateGroups.has(safeDate)) dateGroups.set(safeDate, { dir: dirName, paths: [] });
+        dateGroups.get(safeDate)!.paths.push(f.path);
+        filePaths.push(f.path);
+      }
+    }
+  }
+  if (!filePaths.length) { setStatus("Нет файлов для экспорта", "normal"); return; }
+  try {
+    const zipData = await invoke<number[]>("export_files_zip", { filePaths });
+    const zipName = `${client.name.replace(/\s+/g, "_")}_files_by_date_${Date.now()}.zip`;
+    await downloadBlob(zipName, zipData, "application/zip");
+    setStatus("Файлы экспортированы по датам", "saved");
+  } catch (e) {
+    console.error(`exportClientFilesByDate error:`, e);
+    setStatus(`Ошибка: ${e}`, "error");
+  }
+}
+
+async function exportSelectedOrders(clientId: string) {
+  console.log(`UI exportSelectedOrders: clientId=${clientId}`);
+  const client = clients.find(c => c.id === clientId);
+  if (!client || !client.orders.length) {
+    alert("Нет заказов для экспорта");
+    return;
+  }
+  const orderLines = client.orders.map(o =>
+    `<label class="checkbox-label"><input type="checkbox" class="export-order-cb" value="${o.id}" checked /> ${escHtml(o.service_type)} (${formatMoney(o.price, o.currency)})</label>`
+  ).join("");
+  const ok = await showConfirm("Экспорт заказов", `<div style="text-align:left;max-height:300px;overflow-y:auto">Выберите заказы:<br>${orderLines}</div>`);
+  if (!ok) return;
+  const selected = document.querySelectorAll<HTMLInputElement>(".export-order-cb:checked");
+  if (!selected.length) return;
+  const selectedOrders = client.orders.filter(o => {
+    const cb = document.querySelector<HTMLInputElement>(`.export-order-cb[value="${o.id}"]`);
+    return cb?.checked;
+  });
+  const exportData = {
+    client: { name: client.name, email: client.email, social_link: client.social_link },
+    orders: selectedOrders.map(o => ({
+      service_type: o.service_type,
+      price: o.price,
+      currency: o.currency,
+      advance: o.advance,
+      status: o.status,
+      deadline: o.deadline,
+      created_at: o.created_at
+    }))
+  };
+  const json = JSON.stringify(exportData, null, 2);
+  downloadFile(`${client.name.replace(/\s+/g, "_")}_orders_${Date.now()}.json`, json, "application/json");
+  setStatus(`Экспортировано ${selectedOrders.length} заказов`, "saved");
 }
 
 async function importFromFolder() {
@@ -1957,27 +2129,40 @@ function renderFileManager() {
 
 async function openAbout() {
   console.log(`UI openAbout`);
-  const dbDir = await invoke<string>("get_db_dir");
-  const lines: string[] = [];
-  for (const name of ["LICENSE", "EULA.md", "THIRD_PARTY_LICENSES.txt"]) {
-    const tryPath = `${dbDir}/${name}`;
+  const dbDir = await invoke<string>("get_db_dir").catch(() => ".");
+
+  // Load legal texts into tabs
+  const loadLegalText = async (id: string, filename: string) => {
+    const elLegal = el(id);
+    if (!elLegal) return;
     try {
-      console.log(`IPC → read_text_file: ${tryPath}`);
-      const text = await invoke<string>("read_text_file", { path: tryPath });
-      console.log(`IPC ← read_text_file: ${text.length} bytes`);
-      lines.push(`\n─── ${name} ───\n${text}`);
-    } catch {}
-  }
-  if (lines.length > 0) {
-    const aboutContent = el("about-dialog-content")!;
-    let html = `<div class="about-logo">💼 FinanceFugue</div>
-<div class="about-version">Версия 25.7.2026</div>
-<div class="about-desc">Профессиональный менеджер клиентов и заказов для фрилансеров</div>`;
-    for (const line of lines) {
-      html += `<pre style="font-size:10px;color:var(--color-text-dim);max-height:120px;overflow-y:auto;background:var(--color-bg-panel);padding:8px;border-radius:4px;margin-top:8px;text-align:left;white-space:pre-wrap;">${escHtml(line)}</pre>`;
+      const text = await invoke<string>("read_text_file", { path: `${dbDir}/${filename}` });
+      elLegal.textContent = text;
+    } catch {
+      elLegal.textContent = `Файл ${filename} не найден.\n\nFinanceFugue предоставляется «как есть» без каких-либо гарантий.\nАвтор: Kirill Fandeev (KVF SOFT)\nПоддержка: KVF_SOFT@mail.ru`;
     }
-    aboutContent.innerHTML = html;
-  }
+  };
+  await Promise.all([
+    loadLegalText("about-eula-text", "EULA.md"),
+    loadLegalText("about-privacy-text", "PRIVACY.md"),
+    loadLegalText("about-license-text", "LICENSE"),
+  ]);
+
+  // Tab switching
+  const tabs = document.querySelectorAll(".about-tab");
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      tabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      const tabId = (tab as HTMLElement).dataset.tab;
+      document.querySelectorAll(".about-tab-content").forEach(c => {
+        (c as HTMLElement).style.display = "none";
+      });
+      const target = el(`about-tab-${tabId}`);
+      if (target) (target as HTMLElement).style.display = "block";
+    });
+  });
+
   openModal("modal-about");
 }
 
@@ -1989,36 +2174,79 @@ function openHelp() {
   });
 }
 
-function checkEula() {
+async function checkEula() {
   const accepted = localStorage.getItem("ff_eula_accepted");
-  if (!accepted) {
-    alert(
-      "Добро пожаловать в FinanceFugue!\n\n" +
-      "Используя данное программное обеспечение, вы соглашаетесь с условиями лицензионного соглашения (EULA).\n\n" +
-      "Приложение предоставляется «как есть» без каких-либо гарантий.\n" +
-      "Автор: Kirill Fandeev (KVF SOFT)\n" +
-      "Поддержка: KVF_SOFT@mail.ru"
-    );
-    localStorage.setItem("ff_eula_accepted", "true");
+  const eulaVersion = localStorage.getItem("ff_eula_version");
+  if (accepted === "true" && eulaVersion === "29.7.2026") return;
+
+  const eulaText = el("eula-text")!;
+  try {
+    const dbDir = await invoke<string>("get_db_dir").catch(() => ".");
+    const text = await invoke<string>("read_text_file", { path: `${dbDir}/EULA.md` });
+    eulaText.textContent = text;
+  } catch {
+    eulaText.textContent =
+      "LICENCE AGREEMENT (EULA)\n\n" +
+      "FinanceFugue — Professional Client Manager\n" +
+      "Author: Kirill Fandeev (KVF SOFT)\n\n" +
+      "1. LICENSE GRANT\n" +
+      "   The software is provided «as is». You may use it free of charge.\n\n" +
+      "2. NO WARRANTY\n" +
+      "   The software is provided without any warranty of any kind.\n" +
+      "   The author is not liable for any damages arising from its use.\n\n" +
+      "3. SUPPORT\n" +
+      "   Email: KVF_SOFT@mail.ru\n\n" +
+      "By clicking «Принять» you agree to the terms above.";
   }
+
+  const acceptCheck = el("eula-accept-check") as HTMLInputElement;
+  const acceptBtn = el("eula-accept-btn") as HTMLButtonElement;
+  const declineBtn = el("eula-decline") as HTMLButtonElement;
+
+  acceptCheck.checked = false;
+  acceptBtn.disabled = true;
+
+  acceptCheck.onchange = () => { acceptBtn.disabled = !acceptCheck.checked; };
+  declineBtn.onclick = () => {
+    closeModal("modal-eula");
+    window.close();
+  };
+  acceptBtn.onclick = () => {
+    localStorage.setItem("ff_eula_accepted", "true");
+    localStorage.setItem("ff_eula_version", "29.7.2026");
+    closeModal("modal-eula");
+  };
+
+  openModal("modal-eula");
 }
 
-function checkFirstRun() {
+async function checkFirstRun() {
   const completed = localStorage.getItem("ff_first_run");
-  if (!completed) {
-    setTimeout(() => {
-      alert("Добро пожаловать! 👋\n\nFinanceFugue — профессиональный менеджер клиентов и заказов.\n\n" +
-        "Быстрые клавиши:\n" +
-        "  Ctrl+N — новый клиент\n" +
-        "  Ctrl+F — поиск\n" +
-        "  Ctrl+O — файловый менеджер\n" +
-        "  Ctrl+S — сохранить\n" +
-        "  Ctrl+, — настройки\n" +
-        "  Escape — закрыть диалог\n\n" +
-        "Нажмите «➕ Новый клиент» чтобы начать работу.");
-      localStorage.setItem("ff_first_run", "true");
-    }, 500);
+  if (completed) return;
+
+  try {
+    const selected = await open({ directory: true, multiple: false, title: "Выберите папку для хранения базы данных" });
+    if (selected) {
+      await invoke("save_db_dir", { dir: selected });
+      console.log(`First-run: DB dir set to ${selected}`);
+    }
+  } catch (e) {
+    console.warn("First-run: directory selection cancelled", e);
   }
+
+  setTimeout(() => {
+    alert("Добро пожаловать! 👋\n\nFinanceFugue — профессиональный менеджер клиентов и заказов.\n\n" +
+      "Быстрые клавиши:\n" +
+      "  Ctrl+N — новый клиент\n" +
+      "  Ctrl+F — поиск\n" +
+      "  Ctrl+O — файловый менеджер\n" +
+      "  Ctrl+S — сохранить\n" +
+      "  Ctrl+, — настройки\n" +
+      "  Escape — закрыть диалог\n\n" +
+      "Нажмите «➕ Новый клиент» чтобы начать работу.");
+  }, 500);
+
+  localStorage.setItem("ff_first_run", "true");
 }
 
 // === DRAG-DROP HANDLER ===
@@ -2046,28 +2274,74 @@ async function handleFileDrop(paths: string[], x: number, y: number) {
   hideDragOverlay();
   const el = document.elementFromPoint(x, y);
   if (!el) { console.warn(`handleFileDrop: no element at drop point`); return; }
+
+  // Check if dropped on sidebar / client list → import as client folder
+  const sidebar = (el as HTMLElement).closest(".sidebar");
+  if (sidebar && paths.length > 0) {
+    const firstPath = paths[0];
+    const folderName = firstPath.split(/[/\\]/).pop() || firstPath;
+    const clientName = folderName.replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
+    console.log(`handleFileDrop: importing client folder "${clientName}"`);
+    const ok = await showConfirm("Импорт из папки", `Импортировать "${clientName}" как нового клиента?`);
+    if (!ok) return;
+    let existing = clients.find(c => c.name.toLowerCase() === clientName.toLowerCase());
+    if (!existing) {
+      existing = { id: generateUUID(), name: clientName, email: "", social_link: "", notes: "", orders: [] };
+      clients.push(existing);
+    }
+    let order = existing.orders.length > 0 ? existing.orders[existing.orders.length - 1] : null;
+    if (!order) {
+      order = { id: generateUUID(), service_type: "Импорт", price: 0, currency: "RUB", advance: 0, created_at: nowDatetime(), deadline: "", status: "В работе", files: [], payments: [] };
+      existing.orders.push(order);
+    }
+    let added = 0;
+    for (const srcPath of paths) {
+      const name = srcPath.split(/[/\\]/).pop() || srcPath;
+      const dbDir = await invoke<string>("get_db_dir");
+      const targetDir = `${dbDir}/attached_files/${existing.id}/${order.id}`;
+      try {
+        const newPath = await invoke<string>("copy_file_to", { source: srcPath, destDir: targetDir });
+        order.files.push({ path: newPath, name, is_finished: false, is_folder: false });
+        added++;
+      } catch (e) { console.warn("Failed to import file:", srcPath, e); }
+    }
+    if (added > 0) {
+      clients = await apiSaveClient(existing);
+      renderClientList();
+      setStatus(`Импортировано ${added} файлов для «${clientName}»`, "saved");
+    }
+    return;
+  }
+
+  // Standard file drop on order card
   const card = (el as HTMLElement).closest(".order-card") as HTMLElement | null;
   if (!card) { console.warn(`handleFileDrop: not dropped on order card`); return; }
   const clientId = card.dataset.clientId;
   const orderId = card.dataset.orderId;
   if (!clientId || !orderId) { console.warn(`handleFileDrop: missing data attrs`); return; }
   const client = clients.find(c => c.id === clientId);
-  const order = client?.orders.find(o => o.id === orderId);
+  const order = client?.orders.find(o => o.id == orderId);
   if (!client || !order) { console.warn(`handleFileDrop: client/order not found`); return; }
   const dbDir = await invoke<string>("get_db_dir");
-  console.log(`  → target: ${dbDir}`);
+  console.log(`  → target: ${dbDir}, mode=${appSettings.file_storage_mode}`);
   let added = 0;
   for (const srcPath of paths) {
     const targetDir = `${dbDir}/attached_files/${clientId}/${orderId}`;
     try {
-      console.log(`IPC → copy_file_to: ${srcPath}`);
-      const newPath = await invoke<string>("copy_file_to", { source: srcPath, destDir: targetDir });
-      console.log(`IPC ← copy_file_to: ${newPath}`);
+      let newPath: string;
+      if (appSettings.file_storage_mode === "link") {
+        console.log(`IPC → link_file: ${srcPath}`);
+        newPath = await invoke<string>("link_file", { source: srcPath, destDir: targetDir });
+      } else {
+        console.log(`IPC → copy_file_to: ${srcPath}`);
+        newPath = await invoke<string>("copy_file_to", { source: srcPath, destDir: targetDir });
+      }
+      console.log(`IPC ← file added: ${newPath}`);
       const name = srcPath.split(/[/\\]/).pop() || srcPath;
       order.files.push({ path: newPath, name, is_finished: false, is_folder: false });
       added++;
     } catch (e) {
-      console.warn("Failed to copy dropped file:", srcPath, e);
+      console.warn("Failed to add dropped file:", srcPath, e);
     }
   }
   if (added > 0) {
@@ -2314,6 +2588,10 @@ async function continueInit() {
     if (appSettings.deadline_notifications) checkDeadlineNotifications();
   }, 1000);
 
+  setInterval(() => {
+    if (appSettings.deadline_notifications) checkDeadlineNotifications();
+  }, 30 * 60 * 1000);
+
   console.log("=== FinanceFugue Initialization Complete ===");
   setStatus("FinanceFugue готов к работе", "saved", 3000);
 }
@@ -2343,6 +2621,16 @@ function initSettingsWindow() {
     appSettings.deadline_notifications = (e.target as HTMLInputElement).checked;
     saveSettings(appSettings);
   });
+
+  const fileModeSelect = el("set-file-storage-mode") as HTMLSelectElement;
+  if (fileModeSelect) {
+    fileModeSelect.value = appSettings.file_storage_mode;
+    fileModeSelect.addEventListener("change", (e) => {
+      appSettings.file_storage_mode = (e.target as HTMLSelectElement).value as "copy" | "link";
+      saveSettings(appSettings);
+      setStatus(`Режим файлов: ${appSettings.file_storage_mode === "copy" ? "копирование" : "ссылка"}`, "saved");
+    });
+  }
 
   // Password management
   el("set-change-password")?.addEventListener("click", async () => {
@@ -2485,6 +2773,7 @@ function initSettingsWindow() {
         if (!Array.isArray(imported)) throw new Error("Неверный формат файла");
         const ok = await showConfirm("Импорт данных", `Будет загружено ${imported.length} клиентов. Продолжить?`);
         if (!ok) return;
+        try { await invoke("backup_db", { note: "pre_import" }); } catch {}
         for (const client of imported) {
           clients = await apiSaveClient(client);
         }

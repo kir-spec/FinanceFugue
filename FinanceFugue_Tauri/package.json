@@ -1,7 +1,7 @@
 {
   "name": "financefugue-tauri",
   "private": true,
-  "version": "29.07.2026",
+  "version": "29.7.2026",
   "type": "module",
   "scripts": {
     "dev": "vite",

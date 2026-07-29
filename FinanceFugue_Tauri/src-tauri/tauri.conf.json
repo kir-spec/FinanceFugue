@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "FinanceFugue",
-  "version": "29.07.2026",
+  "version": "29.7.2026",
   "identifier": "com.kirspec.financefugue",
   "build": {
     "beforeDevCommand": "npm run dev",

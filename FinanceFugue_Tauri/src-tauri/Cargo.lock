@@ -902,7 +902,7 @@ dependencies = [
 
 [[package]]
 name = "financefugue-tauri"
-version = "25.7.2026"
+version = "29.7.2026"
 dependencies = [
  "chrono",
  "dirs 5.0.1",

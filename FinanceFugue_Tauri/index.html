@@ -152,6 +152,13 @@
             <input type="checkbox" id="set-deadline-notify" />
             <span>Уведомления о приближающихся дедлайнах</span>
           </label>
+          <div class="form-group" style="margin-top:8px;">
+            <label>Режим хранения файлов</label>
+            <select id="set-file-storage-mode" class="sort-select" style="width:100%">
+              <option value="copy">Копировать в attached_files</option>
+              <option value="link">Ссылка на оригинал (копия)</option>
+            </select>
+          </div>
         </div>
 
         <div class="settings-section">
@@ -159,7 +166,7 @@
           <div class="about-block">
             <strong>FinanceFugue</strong> — Tauri Edition<br>
             <span class="text-muted">Профессиональный менеджер клиентов и заказов</span><br>
-            <span class="text-muted" style="font-size:11px;">v29.07.2026 · Rust + TypeScript · kir-spec</span>
+            <span class="text-muted" style="font-size:11px;">v29.7.2026 · Rust + TypeScript · kir-spec</span>
           </div>
         </div>
       </div>
@@ -238,6 +245,7 @@
         <div class="settings-btns-row">
           <button class="btn btn-secondary" id="cs-export-json" type="button">📊 Экспорт заказов (JSON)</button>
           <button class="btn btn-secondary" id="cs-export-files-zip" type="button">📦 Экспорт файлов (ZIP)</button>
+          <button class="btn btn-secondary" id="cs-export-by-date" type="button">📅 По датам (ZIP)</button>
         </div>
       </div>
       <div class="modal-actions" style="justify-content:space-between;">
@@ -416,23 +424,60 @@
   </dialog>
 
   <!-- ==================== О ПРОГРАММЕ ==================== -->
-  <dialog id="modal-about" class="modal modal-sm">
+  <dialog id="modal-about" class="modal">
     <div class="modal-content">
       <div class="modal-header">
         <h3>ℹ️ О программе</h3>
         <button class="modal-close" onclick="document.getElementById('modal-about').close()">✕</button>
       </div>
-      <div class="about-dialog" id="about-dialog-content">
-        <div class="about-logo">💼 FinanceFugue</div>
-        <div class="about-version">Версия 29.07.2026</div>
-        <div class="about-desc">Профессиональный менеджер клиентов и заказов для фрилансеров</div>
-        <div class="about-line">Разработчик: Kirill Fandeev (KVF SOFT)</div>
-        <div class="about-line">Поддержка: KVF_SOFT@mail.ru</div>
-        <div class="about-line">Технологии: Tauri 2.0 · Rust · TypeScript</div>
-        <div class="about-line">Лицензия: MIT</div>
+      <div class="about-tabs">
+        <button class="about-tab active" data-tab="info">ℹ️ О программе</button>
+        <button class="about-tab" data-tab="eula">📄 EULA</button>
+        <button class="about-tab" data-tab="privacy">🔒 Конфиденциальность</button>
+        <button class="about-tab" data-tab="license">📜 Лицензия</button>
+      </div>
+      <div class="about-tab-content" id="about-tab-info">
+        <div class="about-dialog">
+          <div class="about-logo">💼 FinanceFugue</div>
+          <div class="about-version">Версия 29.7.2026</div>
+          <div class="about-desc">Профессиональный менеджер клиентов и заказов для фрилансеров</div>
+          <div class="about-line">Разработчик: Kirill Fandeev (KVF SOFT)</div>
+          <div class="about-line">Поддержка: KVF_SOFT@mail.ru</div>
+          <div class="about-line">Технологии: Tauri 2.0 · Rust · TypeScript</div>
+          <div class="about-line">Лицензия: MIT</div>
+        </div>
+      </div>
+      <div class="about-tab-content" id="about-tab-eula" style="display:none">
+        <pre class="about-legal-text" id="about-eula-text">Загрузка...</pre>
+      </div>
+      <div class="about-tab-content" id="about-tab-privacy" style="display:none">
+        <pre class="about-legal-text" id="about-privacy-text">Загрузка...</pre>
+      </div>
+      <div class="about-tab-content" id="about-tab-license" style="display:none">
+        <pre class="about-legal-text" id="about-license-text">Загрузка...</pre>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="document.getElementById('modal-about').close()">Закрыть</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ==================== EULA ДИАЛОГ ==================== -->
+  <dialog id="modal-eula" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📄 Лицензионное соглашение (EULA)</h3>
+      </div>
+      <div class="eula-content">
+        <pre class="about-legal-text" id="eula-text">Загрузка...</pre>
+        <label class="checkbox-label" style="margin-top:12px;">
+          <input type="checkbox" id="eula-accept-check" />
+          <span>Я прочитал и принимаю условия лицензионного соглашения</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="eula-decline">Отклонить</button>
+        <button type="button" class="btn btn-primary" id="eula-accept-btn" disabled>Принять</button>
       </div>
     </div>
   </dialog>

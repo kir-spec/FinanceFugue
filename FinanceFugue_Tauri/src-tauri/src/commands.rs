@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 use chrono::Local;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
 use tracing::{info, error, warn, debug};
 use sha2::{Sha256, Digest};
@@ -507,4 +507,303 @@ pub fn set_password(password: Option<String>) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+// === DATABASE BACKUP / RESTORE ===
+
+fn backups_dir() -> Result<PathBuf, String> {
+    let dir = storage::app_data_dir()
+        .ok_or_else(|| "Не удалось определить директорию AppData".to_string())?
+        .join("backups");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+#[tauri::command]
+pub fn backup_db(state: State<'_, Arc<AppState>>, note: Option<String>) -> Result<String, String> {
+    info!("IPC: backup_db called");
+    let db_path = state.storage.db_path();
+    if !db_path.exists() {
+        return Err("Файл базы данных не найден".to_string());
+    }
+    let dir = backups_dir()?;
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let note_suffix = note.map(|n| format!("_{}", n.replace(' ', "_"))).unwrap_or_default();
+    let target = dir.join(format!("pro_database_backup_{}{}.json", timestamp, note_suffix));
+    fs::copy(db_path, &target).map_err(|e| e.to_string())?;
+    let size = target.metadata().map(|m| m.len()).unwrap_or(0);
+    info!("IPC: backup_db — success: {:?} ({} bytes)", target, size);
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[derive(serde::Serialize)]
+pub struct DbBackupEntry {
+    pub filename: String,
+    pub size: u64,
+    pub timestamp: String,
+}
+
+#[tauri::command]
+pub fn list_db_backups() -> Result<Vec<DbBackupEntry>, String> {
+    debug!("IPC: list_db_backups");
+    let dir = backups_dir()?;
+    let mut entries = Vec::new();
+    if let Ok(read_dir) = fs::read_dir(&dir) {
+        for entry in read_dir.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("pro_database_backup_") && name.ends_with(".json") {
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                let ts = entry.metadata()
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs().to_string())
+                    .unwrap_or_default();
+                entries.push(DbBackupEntry { filename: name, size, timestamp: ts });
+            }
+        }
+    }
+    entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    info!("IPC: list_db_backups — {} backups found", entries.len());
+    Ok(entries)
+}
+
+#[tauri::command]
+pub fn restore_db_backup(filename: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    info!("IPC: restore_db_backup — filename={}", filename);
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return Err("Недопустимое имя файла".to_string());
+    }
+    let dir = backups_dir()?;
+    let backup_path = dir.join(&filename);
+    if !backup_path.exists() {
+        return Err(format!("Бэкап не найден: {}", filename));
+    }
+    let db_path = state.storage.db_path().to_path_buf();
+    // Create a pre-restore backup of current DB
+    if db_path.exists() {
+        let ts = Local::now().format("%Y%m%d_%H%M%S").to_string();
+        let pre_backup = dir.join(format!("pro_database_backup_{}_pre_restore.json", ts));
+        fs::copy(&db_path, &pre_backup).map_err(|e| e.to_string())?;
+        info!("IPC: restore_db_backup — pre-restore backup saved: {:?}", pre_backup);
+    }
+    // Load backup data
+    let data = fs::read(&backup_path).map_err(|e| e.to_string())?;
+    // Parse and validate
+    let clients: Vec<Client> = serde_json::from_slice(&data).map_err(|e| format!("Ошибка парсинга бэкапа: {}", e))?;
+    // Save to current DB
+    state.storage.save_clients(&clients).map_err(|e| e.to_string())?;
+    // Update in-memory state
+    let mut state_clients = state.clients.lock().unwrap_or_else(|e| e.into_inner());
+    *state_clients = clients;
+    info!("IPC: restore_db_backup — success, restored {} clients", state_clients.len());
+    Ok(())
+}
+
+// === DB MIGRATION ===
+
+#[tauri::command]
+pub fn migrate_db_dir(new_dir: String, move_files: bool, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    info!("IPC: migrate_db_dir — new_dir={}, move_files={}", new_dir, move_files);
+    let new_dir_path = Path::new(&new_dir);
+    fs::create_dir_all(new_dir_path).map_err(|e| format!("Не удалось создать директорию: {}", e))?;
+
+    let old_db_path = state.storage.db_path().to_path_buf();
+    let new_db_path = new_dir_path.join("pro_database.json");
+
+    // Copy DB file
+    if old_db_path.exists() && old_db_path != new_db_path {
+        fs::copy(&old_db_path, &new_db_path).map_err(|e| format!("Не удалось скопировать БД: {}", e))?;
+        info!("IPC: migrate_db_dir — DB copied to {:?}", new_db_path);
+    }
+
+    // Optionally copy attached_files
+    if move_files {
+        let old_attached = old_db_path.parent()
+            .map(|p| p.join("attached_files"))
+            .unwrap_or_else(|| PathBuf::from("attached_files"));
+        let new_attached = new_dir_path.join("attached_files");
+        if old_attached.exists() && old_attached != new_attached {
+            copy_dir_recursive(&old_attached, &new_attached)?;
+            info!("IPC: migrate_db_dir — attached_files copied to {:?}", new_attached);
+        }
+    }
+
+    // Save new config
+    storage::save_db_dir(&new_dir)?;
+
+    info!("IPC: migrate_db_dir — success. Restart required.");
+    Ok(())
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
+    fs::create_dir_all(dst).map_err(|e| format!("Не удалось создать директорию {:?}: {}", dst, e))?;
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path).map_err(|e| format!("Не удалось скопировать {:?}: {}", src_path, e))?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_attached_files_dir(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    let db_path = state.storage.db_path();
+    let attached = db_path.parent()
+        .map(|p| p.join("attached_files"))
+        .unwrap_or_else(|| PathBuf::from("attached_files"));
+    Ok(attached.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn link_file(source: String, dest_dir: String) -> Result<String, String> {
+    debug!("IPC: link_file — source={}, dest_dir={}", source, dest_dir);
+    let src = Path::new(&source);
+    if !src.exists() {
+        return Err(format!("Файл не найден: {}", source));
+    }
+    let dir = Path::new(&dest_dir);
+    fs::create_dir_all(dir).map_err(|e| format!("Не удалось создать директорию: {}", e))?;
+    let name = match src.file_name() {
+        Some(n) => n.to_string_lossy().to_string(),
+        None => return Err("Не удалось определить имя файла".to_string()),
+    };
+    let dest = dir.join(&name);
+    let final_path = if dest.exists() {
+        let stem = dest.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| name.clone());
+        let ext = dest.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+        let timestamp = Local::now().format("%H%M%S").to_string();
+        dir.join(format!("{}_{}{}", stem, timestamp, ext))
+    } else {
+        dest
+    };
+    fs::copy(src, &final_path).map_err(|e| format!("Не удалось скопировать файл: {}", e))?;
+    info!("IPC: link_file — success: {:?}", final_path);
+    Ok(final_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn add_folder_link(folder_path: String, dest_dir: String) -> Result<String, String> {
+    debug!("IPC: add_folder_link — folder_path={}, dest_dir={}", folder_path, dest_dir);
+    let src = Path::new(&folder_path);
+    if !src.is_dir() {
+        return Err(format!("Папка не найдена: {}", folder_path));
+    }
+    let dir = Path::new(&dest_dir);
+    fs::create_dir_all(dir).map_err(|e| format!("Не удалось создать директорию: {}", e))?;
+    let name = match src.file_name() {
+        Some(n) => n.to_string_lossy().to_string(),
+        None => return Err("Не удалось определить имя папки".to_string()),
+    };
+    let dest = dir.join(&name);
+    // Copy the entire folder recursively
+    copy_dir_recursive(src, &dest)?;
+    info!("IPC: add_folder_link — success: {:?}", dest);
+    Ok(dest.to_string_lossy().to_string())
+}
+
+// === SETTINGS BACKUP (stored in AppData for cross-window access) ===
+
+fn settings_path() -> Result<PathBuf, String> {
+    let app_dir = storage::app_data_dir()
+        .ok_or_else(|| "Не удалось определить директорию AppData".to_string())?;
+    fs::create_dir_all(&app_dir).map_err(|e| e.to_string())?;
+    Ok(app_dir.join("app_settings.json"))
+}
+
+#[tauri::command]
+pub fn save_settings_to_file(settings_json: String) -> Result<(), String> {
+    debug!("IPC: save_settings_to_file — {} bytes", settings_json.len());
+    let p = settings_path()?;
+    fs::write(&p, &settings_json).map_err(|e| e.to_string())?;
+    info!("IPC: save_settings_to_file — success");
+    Ok(())
+}
+
+#[tauri::command]
+pub fn load_settings_from_file() -> Result<Option<String>, String> {
+    debug!("IPC: load_settings_from_file");
+    let p = settings_path()?;
+    if !p.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&p).map_err(|e| e.to_string())?;
+    info!("IPC: load_settings_from_file — success, {} bytes", content.len());
+    Ok(Some(content))
+}
+
+#[tauri::command]
+pub fn backup_settings(settings_json: String) -> Result<String, String> {
+    info!("IPC: backup_settings");
+    let dir = storage::app_data_dir()
+        .ok_or_else(|| "Не удалось определить директорию AppData".to_string())?
+        .join("settings_backups");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let target = dir.join(format!("app_settings_backup_{}.json", timestamp));
+    fs::write(&target, &settings_json).map_err(|e| e.to_string())?;
+    // Prune to 5 most recent
+    if let Ok(entries) = fs::read_dir(&dir) {
+        let mut backups: Vec<_> = entries
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with("app_settings_backup_"))
+            .collect();
+        backups.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+        for old in backups.into_iter().skip(5) {
+            let _ = fs::remove_file(old.path());
+        }
+    }
+    info!("IPC: backup_settings — saved to {:?}", target);
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn list_settings_backups() -> Result<Vec<DbBackupEntry>, String> {
+    debug!("IPC: list_settings_backups");
+    let dir = storage::app_data_dir()
+        .ok_or_else(|| "Не удалось определить директорию AppData".to_string())?
+        .join("settings_backups");
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&dir).map_err(|e| e.to_string())?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("app_settings_backup_") {
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            let ts = entry.metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs().to_string())
+                .unwrap_or_default();
+            entries.push(DbBackupEntry { filename: name, size, timestamp: ts });
+        }
+    }
+    entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    info!("IPC: list_settings_backups — {} found", entries.len());
+    Ok(entries)
+}
+
+#[tauri::command]
+pub fn restore_settings_backup(filename: String) -> Result<String, String> {
+    info!("IPC: restore_settings_backup — {}", filename);
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return Err("Недопустимое имя файла".to_string());
+    }
+    let dir = storage::app_data_dir()
+        .ok_or_else(|| "Не удалось определить директорию AppData".to_string())?
+        .join("settings_backups");
+    let backup_path = dir.join(&filename);
+    if !backup_path.exists() {
+        return Err(format!("Бэкап не найден: {}", filename));
+    }
+    let content = fs::read_to_string(&backup_path).map_err(|e| e.to_string())?;
+    info!("IPC: restore_settings_backup — success");
+    Ok(content)
 }

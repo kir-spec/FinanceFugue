@@ -48,6 +48,18 @@ fn main() {
             has_password,
             check_password,
             set_password,
+            backup_db,
+            list_db_backups,
+            restore_db_backup,
+            migrate_db_dir,
+            get_attached_files_dir,
+            link_file,
+            add_folder_link,
+            save_settings_to_file,
+            load_settings_from_file,
+            backup_settings,
+            list_settings_backups,
+            restore_settings_backup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

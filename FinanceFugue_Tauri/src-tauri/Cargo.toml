@@ -1,6 +1,6 @@
 [package]
 name = "financefugue-tauri"
-version = "29.07.2026"
+version = "29.7.2026"
 description = "FinanceFugue Desktop Client Manager (Tauri / Rust Edition)"
 authors = ["kir-spec"]
 edition = "2021"

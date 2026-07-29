@@ -2178,46 +2178,42 @@ async function checkEula() {
   const accepted = localStorage.getItem("ff_eula_accepted");
   const eulaVersion = localStorage.getItem("ff_eula_version");
   if (accepted === "true" && eulaVersion === "29.7.2026") return;
+  invoke("open_eula_window").catch(e => console.error("Failed to open EULA window:", e));
+}
 
-  const eulaText = el("eula-text")!;
+async function initEulaWindow() {
+  console.log("=== EULA Window Init ===");
+  el("lock-screen")!.style.display = "none";
+  el("main-app")!.style.display = "none";
+  const ep = el("eula-page")!;
+  ep.style.display = "block";
+  ep.style.background = "#1E1E1E";
+  ep.style.minHeight = "100vh";
+
+  const eulaText = el("eula-page-text")!;
   try {
     const dbDir = await invoke<string>("get_db_dir").catch(() => ".");
     const text = await invoke<string>("read_text_file", { path: `${dbDir}/EULA.md` });
     eulaText.textContent = text;
   } catch {
     eulaText.textContent =
-      "LICENCE AGREEMENT (EULA)\n\n" +
-      "FinanceFugue — Professional Client Manager\n" +
-      "Author: Kirill Fandeev (KVF SOFT)\n\n" +
-      "1. LICENSE GRANT\n" +
-      "   The software is provided «as is». You may use it free of charge.\n\n" +
-      "2. NO WARRANTY\n" +
-      "   The software is provided without any warranty of any kind.\n" +
-      "   The author is not liable for any damages arising from its use.\n\n" +
-      "3. SUPPORT\n" +
-      "   Email: KVF_SOFT@mail.ru\n\n" +
-      "By clicking «Принять» you agree to the terms above.";
+      "LICENCE AGREEMENT (EULA)\n\nFinanceFugue — Professional Client Manager\n" +
+      "Author: Kirill Fandeev (KVF SOFT)\nSupport: KVF_SOFT@mail.ru\n\n" +
+      "1. LICENSE GRANT — The software is provided «as is».\n" +
+      "2. NO WARRANTY — No warranty of any kind.\n" +
+      "3. INTELLECTUAL PROPERTY — All rights reserved.\n\n" +
+      "By accepting, you agree to the terms above.";
   }
 
-  const acceptCheck = el("eula-accept-check") as HTMLInputElement;
-  const acceptBtn = el("eula-accept-btn") as HTMLButtonElement;
-  const declineBtn = el("eula-decline") as HTMLButtonElement;
-
-  acceptCheck.checked = false;
-  acceptBtn.disabled = true;
-
-  acceptCheck.onchange = () => { acceptBtn.disabled = !acceptCheck.checked; };
-  declineBtn.onclick = () => {
-    closeModal("modal-eula");
-    window.close();
-  };
-  acceptBtn.onclick = () => {
+  el("eula-close-btn")?.addEventListener("click", () => getCurrentWindow().close().catch(() => {}));
+  el("eula-page-decline")?.addEventListener("click", () => { getCurrentWindow().close().catch(() => {}); setTimeout(() => window.close(), 100); });
+  el("eula-page-accept")?.addEventListener("click", () => {
     localStorage.setItem("ff_eula_accepted", "true");
     localStorage.setItem("ff_eula_version", "29.7.2026");
-    closeModal("modal-eula");
-  };
+    getCurrentWindow().close().catch(() => {});
+  });
 
-  openModal("modal-eula");
+  console.log("=== EULA Window Ready ===");
 }
 
 async function checkFirstRun() {
@@ -2598,8 +2594,12 @@ async function continueInit() {
 
 function initSettingsWindow() {
   console.log("=== Settings Window Init ===");
+  el("lock-screen")!.style.display = "none";
   el("main-app")!.style.display = "none";
-  el("settings-page")!.style.display = "block";
+  const sp = el("settings-page")!;
+  sp.style.display = "block";
+  sp.style.background = "#1E1E1E";
+  sp.style.minHeight = "100vh";
 
   const closeBtn = el("settings-close-btn");
   if (closeBtn) {
@@ -2791,11 +2791,8 @@ function initSettingsWindow() {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  const currentWindow = getCurrentWindow();
-  const isSettingsWindow = currentWindow.label === "settings";
-  if (isSettingsWindow) {
-    initSettingsWindow();
-  } else {
-    init();
-  }
+  const lbl = getCurrentWindow().label;
+  if (lbl === "settings") { initSettingsWindow(); }
+  else if (lbl === "eula") { initEulaWindow(); }
+  else { init(); }
 });

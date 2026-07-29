@@ -43,6 +43,7 @@ fn main() {
             save_db_dir,
             get_saved_db_dir,
             open_settings_window,
+            open_eula_window,
             read_text_file,
             save_file_bytes,
             has_password,

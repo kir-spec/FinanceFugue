@@ -419,6 +419,23 @@ pub fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn open_eula_window(app: tauri::AppHandle) -> Result<(), String> {
+    info!("IPC: open_eula_window");
+    if let Some(win) = app.get_webview_window("eula") {
+        let _ = win.set_focus();
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(&app, "eula", WebviewUrl::App("index.html".into()))
+        .title("FinanceFugue — Лицензионное соглашение")
+        .inner_size(620.0, 500.0)
+        .resizable(true)
+        .build()
+        .map_err(|e| { error!("open_eula_window — failed: {}", e); e.to_string() })?;
+    info!("open_eula_window — success");
+    Ok(())
+}
+
+#[tauri::command]
 pub fn read_text_file(path: String) -> Result<String, String> {
     debug!("IPC: read_text_file — path={}", path);
     let result = fs::read_to_string(&path);

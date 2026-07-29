@@ -5,6 +5,8 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open } from "@tauri-apps/plugin-dialog";
 
 // =====================================================
 // INTERFACES
@@ -85,29 +87,36 @@ function currSym(currency: string): string {
   return CURRENCY_SYMBOLS[currency] || currency;
 }
 
-function orderTotalReceived(order: Order): number {
-  return order.payments.reduce((s, p) => s + p.amount, 0);
+function safeNum(v: unknown, fallback = 0): number {
+  return isFinite(v as number) ? (v as number) : fallback;
+}
+
+function orderRealReceived(order: Order): number {
+  const sum = order.payments.reduce((s, p) => s + safeNum(p.amount), 0);
+  return Math.round(sum * 100) / 100;
 }
 
 function orderDebt(order: Order): number {
-  return Math.max(0, order.price - orderTotalReceived(order));
+  const price = safeNum(order.price);
+  const received = orderRealReceived(order);
+  return Math.round((price - received) * 100) / 100;
 }
 
 function formatMoney(amount: number, currency = "RUB"): string {
+  if (!isFinite(amount)) amount = 0;
+  amount = Math.round(amount * 100) / 100;
   const sym = currSym(currency);
   const abs = Math.abs(amount);
-  let formatted: string;
-  if (abs === Math.floor(abs)) {
-    formatted = abs.toLocaleString("ru-RU");
-  } else {
-    formatted = abs.toFixed(2).replace(".", ",");
-  }
+  const formatted = abs.toLocaleString("ru-RU", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
   return `${amount < 0 ? "-" : ""}${formatted} ${sym}`;
 }
 
 function formatMultiCurrency(byCurrency: Record<string, number>): string {
-  const nonZero = Object.entries(byCurrency).filter(([, v]) => Math.abs(v) > 0.001);
-  if (nonZero.length === 0) return formatMoney(0);
+  const nonZero = Object.entries(byCurrency).filter(([, v]) => Math.abs(Math.round(v * 100) / 100) >= 0.01);
+  if (nonZero.length === 0) return "0";
   return nonZero.sort(([a],[b]) => a.localeCompare(b))
     .map(([c, v]) => formatMoney(v, c))
     .join(" + ");
@@ -118,37 +127,41 @@ function sumByCurrency(orders: Order[], field: "advance" | "debt" | "received", 
   for (const order of orders) {
     if (activeOnly && order.status === "Завершен") continue;
     const curr = order.currency || "RUB";
-    if (!totals[curr]) totals[curr] = 0;
-    if (field === "advance") totals[curr] += order.advance;
-    else if (field === "debt") totals[curr] += orderDebt(order);
-    else if (field === "received") totals[curr] += orderTotalReceived(order);
+    const val = safeNum(
+      field === "advance" ? order.advance
+        : field === "debt" ? orderDebt(order)
+        : field === "received" ? orderRealReceived(order)
+        : 0
+    );
+    totals[curr] = Math.round(((totals[curr] || 0) + val) * 100) / 100;
   }
   return totals;
 }
 
 function computeClientStats(client: Client) {
-  const totalOrders = client.orders.length;
-  const completedOrders = client.orders.filter(o => o.status === "Завершен").length;
   const allOrders = client.orders;
-  const advanceByCurrency = sumByCurrency(allOrders, "advance");
-  const receivedByCurrency = sumByCurrency(allOrders, "received");
-  const debtByCurrency = sumByCurrency(allOrders, "debt", true);
-  return { totalOrders, completedOrders, advanceByCurrency, receivedByCurrency, debtByCurrency };
+  const totalOrders = allOrders.length;
+  const completedOrders = allOrders.filter(o => o.status === "Завершен").length;
+  return {
+    totalOrders,
+    completedOrders,
+    advanceByCurrency: sumByCurrency(allOrders, "advance"),
+    receivedByCurrency: sumByCurrency(allOrders, "received"),
+    debtByCurrency: sumByCurrency(allOrders, "debt", true),
+  };
 }
 
 function computeGlobalStats(clients: Client[]) {
-  let activeOrders = 0, doneOrders = 0;
   const allOrders = clients.flatMap(c => c.orders);
-  const advanceByCurrency = sumByCurrency(allOrders, "advance");
-  const debtByCurrency = sumByCurrency(allOrders, "debt", true);
-  const cashByCurrency = sumByCurrency(allOrders, "received");
-  for (const c of clients) {
-    for (const o of c.orders) {
-      if (o.status === "Завершен") doneOrders++;
-      else activeOrders++;
-    }
-  }
-  return { activeOrders, doneOrders, advanceByCurrency, debtByCurrency, cashByCurrency };
+  const activeOrders = allOrders.filter(o => o.status !== "Завершен").length;
+  const doneOrders = allOrders.length - activeOrders;
+  return {
+    activeOrders,
+    doneOrders,
+    advanceByCurrency: sumByCurrency(allOrders, "advance"),
+    debtByCurrency: sumByCurrency(allOrders, "debt", true),
+    receivedByCurrency: sumByCurrency(allOrders, "received"),
+  };
 }
 
 function dateToInput(ddmmyyyy: string): string {
@@ -258,25 +271,32 @@ function setStatus(msg: string, type: "normal"|"saved"|"error" = "normal", durat
 
 async function apiGetClients(): Promise<Client[]> {
   try {
-    return await invoke<Client[]>("get_clients");
+    console.log("IPC → get_clients");
+    const result = await invoke<Client[]>("get_clients");
+    console.log(`IPC ← get_clients: ${result.length} clients`);
+    return result;
   } catch (e) {
-    console.warn("Tauri IPC get_clients fallback:", e);
+    console.warn("IPC ✗ get_clients fallback:", e);
     return clients;
   }
 }
 
 async function apiSaveClient(client: Client): Promise<Client[]> {
+  console.log(`IPC → save_client: id=${client.id}, name="${client.name}"`);
   try {
     const result = await invoke<Client[]>("save_client", { client });
+    console.log(`IPC ← save_client: success, total ${result.length} clients`);
     setStatus("Сохранено", "saved");
     return result;
   } catch (e) {
-    console.warn("Tauri IPC save_client fallback:", e);
+    console.warn(`IPC ✗ save_client fallback (${client.id}):`, e);
     const idx = clients.findIndex(c => c.id === client.id);
     if (idx >= 0) {
       clients[idx] = client;
+      console.log(`  → local update at index ${idx}`);
     } else {
       clients.push(client);
+      console.log(`  → local push, now ${clients.length} clients`);
     }
     setStatus("Сохранено (локально)", "saved");
     return [...clients];
@@ -284,47 +304,61 @@ async function apiSaveClient(client: Client): Promise<Client[]> {
 }
 
 async function apiDeleteClient(clientId: string): Promise<Client[]> {
+  console.log(`IPC → delete_client: clientId=${clientId}`);
   try {
-    return await invoke<Client[]>("delete_client", { clientId });
+    const result = await invoke<Client[]>("delete_client", { clientId });
+    console.log(`IPC ← delete_client: success, ${result.length} clients remaining`);
+    return result;
   } catch (e) {
-    console.warn("Tauri IPC delete_client fallback:", e);
+    console.warn(`IPC ✗ delete_client fallback (${clientId}):`, e);
     clients = clients.filter(c => c.id !== clientId);
+    console.log(`  → local filter, now ${clients.length} clients`);
     return [...clients];
   }
 }
 
 async function apiDeleteOrder(clientId: string, orderId: string): Promise<Client[]> {
+  console.log(`IPC → delete_order: clientId=${clientId}, orderId=${orderId}`);
   try {
-    return await invoke<Client[]>("delete_order", { clientId, orderId });
+    const result = await invoke<Client[]>("delete_order", { clientId, orderId });
+    console.log(`IPC ← delete_order: success`);
+    return result;
   } catch (e) {
-    console.warn("Tauri IPC delete_order fallback:", e);
+    console.warn(`IPC ✗ delete_order fallback:`, e);
     const client = clients.find(c => c.id === clientId);
     if (client) {
       client.orders = client.orders.filter(o => o.id !== orderId);
+      console.log(`  → local filter, ${client.orders.length} orders remaining`);
     }
     return [...clients];
   }
 }
 
 async function apiDeletePayment(clientId: string, orderId: string, paymentId: string): Promise<Client[]> {
+  console.log(`IPC → delete_payment: clientId=${clientId}, orderId=${orderId}, paymentId=${paymentId}`);
   try {
-    return await invoke<Client[]>("delete_payment", { clientId, orderId, paymentId });
+    const result = await invoke<Client[]>("delete_payment", { clientId, orderId, paymentId });
+    console.log(`IPC ← delete_payment: success`);
+    return result;
   } catch (e) {
-    console.warn("Tauri IPC delete_payment fallback:", e);
+    console.warn(`IPC ✗ delete_payment fallback:`, e);
     const client = clients.find(c => c.id === clientId);
     const order = client?.orders.find(o => o.id === orderId);
     if (order) {
       order.payments = order.payments.filter(p => p.id !== paymentId);
+      console.log(`  → local filter, ${order.payments.length} payments remaining`);
     }
     return [...clients];
   }
 }
 
 async function apiOpenPath(path: string): Promise<void> {
+  console.log(`IPC → open_path: "${path}"`);
   try {
     await invoke("open_path", { path });
+    console.log(`IPC ← open_path: success`);
   } catch (e) {
-    console.warn("Could not open path:", path, e);
+    console.warn(`IPC ✗ open_path: "${path}"`, e);
   }
 }
 
@@ -335,35 +369,40 @@ async function apiOpenPath(path: string): Promise<void> {
 function renderDashboard() {
   const stats = computeGlobalStats(clients);
   const totalDebt = Object.values(stats.debtByCurrency).reduce((s, v) => s + v, 0);
+  console.log(`UI renderDashboard: active=${stats.activeOrders}, done=${stats.doneOrders}, debt=${formatMoney(totalDebt)}`);
 
   el("dash-active")!.textContent = String(stats.activeOrders);
   el("dash-done")!.textContent = String(stats.doneOrders);
   el("dash-advance")!.textContent = formatMultiCurrency(stats.advanceByCurrency);
   el("dash-debt")!.textContent = formatMultiCurrency(stats.debtByCurrency);
-  el("dash-cash")!.textContent = formatMultiCurrency(stats.cashByCurrency);
+  el("dash-cash")!.textContent = formatMultiCurrency(stats.receivedByCurrency);
 
   const debtEl = el("dash-debt")!;
-  debtEl.style.color = totalDebt > 0 ? "#FF4B2B" : "#28A745";
+  debtEl.style.color = totalDebt > 0 ? "#FF4B2B" : totalDebt < 0 ? "#28A745" : "";
 }
 
 function renderClientList() {
   const container = el("client-list")!;
   const query = (el("search-input") as HTMLInputElement).value;
   const sorted = getSortedClients(clients, sortMode, query);
+  console.log(`UI renderClientList: mode=${sortMode}, query="${query}", shown=${sorted.length}/${clients.length}`);
 
   container.innerHTML = "";
   for (const client of sorted) {
     const activeOrders = client.orders.filter(o => o.status === "В работе").length;
-    const debt = Object.values(sumByCurrency(client.orders, "debt", true)).reduce((s,v)=>s+v,0);
+    const debtByCurrency = sumByCurrency(client.orders, "debt", true);
 
     const item = document.createElement("div");
     item.className = `client-item${client.id === selectedClientId ? " active" : ""}`;
     item.dataset.clientId = client.id;
 
     let debtHtml = "";
-    if (debt > 0.01) {
-      const debtDisp = formatMultiCurrency(sumByCurrency(client.orders, "debt", true));
-      debtHtml = `<span class="debt-badge">Долг: ${debtDisp}</span>`;
+    const hasDebt = Object.values(debtByCurrency).some(v => v > 0.01);
+    const hasOverpayment = Object.values(debtByCurrency).some(v => v < -0.01);
+    if (hasDebt || hasOverpayment) {
+      const debtDisp = formatMultiCurrency(debtByCurrency);
+      const label = hasOverpayment && !hasDebt ? "Переплата" : "Долг";
+      debtHtml = `<span class="debt-badge" style="color:${hasOverpayment && !hasDebt ? "var(--color-success)" : "var(--color-red)"}">${label}: ${debtDisp}</span>`;
     }
 
     item.innerHTML = `
@@ -387,6 +426,8 @@ function renderClientList() {
 }
 
 function selectClient(id: string) {
+  console.log(`UI selectClient: id=${id}`);
+  if (notesDebounceTimer) { clearTimeout(notesDebounceTimer); notesDebounceTimer = null; }
   selectedClientId = id;
   renderClientList();
   renderClientProfile();
@@ -399,6 +440,7 @@ function getSelectedClient(): Client | undefined {
 function renderClientProfile() {
   const container = el("client-detail")!;
   const client = getSelectedClient();
+  console.log(`UI renderClientProfile: client=${client ? client.name : "none"}, orders=${client ? client.orders.length : 0}`);
 
   if (!client) {
     container.innerHTML = `
@@ -437,8 +479,8 @@ function renderClientProfile() {
     </div>
   `;
 
-  const emailHtml = client.email ? `<a href="#" onclick="openLink('mailto:${escHtml(client.email)}');return false;">📧 ${escHtml(client.email)}</a>` : "";
-  const socialHtml = client.social_link ? `<a href="#" onclick="openLink('${escHtml(client.social_link)}');return false;">🔗 ${escHtml(client.social_link)}</a>` : "";
+  const emailHtml = client.email ? `<a href="#" onclick="openLink('mailto:${jsEscape(client.email)}');return false;">📧 ${escHtml(client.email)}</a>` : "";
+  const socialHtml = client.social_link ? `<a href="#" onclick="openLink('${jsEscape(client.social_link)}');return false;">🔗 ${escHtml(client.social_link)}</a>` : "";
 
   const ordersHtml = client.orders.length > 0
     ? client.orders.map(o => renderOrderCard(client.id, o)).join("")
@@ -507,20 +549,24 @@ function renderOrderCard(clientId: string, order: Order): string {
   let filesListHtml = "";
   if (filesCount > 0) {
     const sorted = [...order.files].sort((a,b) => (Number(b.is_folder) - Number(a.is_folder)));
-    filesListHtml = sorted.map(f => `
-      <div class="file-item">
-        <span>${f.is_folder ? "📁" : "📄"}</span>
+    filesListHtml = sorted.map(f => {
+      const statusIcon = f.is_finished ? "✅" : "⏳";
+      const statusClass = f.is_finished ? "file-finished" : "file-pending";
+      return `
+      <div class="file-item ${statusClass}" data-filename="${escHtml(f.name)}" data-cid="${clientId}" data-oid="${order.id}">
+        <span class="file-status-toggle" onclick="toggleFileFinished('${clientId}', '${order.id}', '${jsEscape(f.name)}')" title="${f.is_finished ? "Отметить как в работе" : "Отметить как выполнен"}">${statusIcon}</span>
         <span class="file-item-name ${f.is_folder ? "folder" : "file"}" data-path="${escHtml(f.path)}">${escHtml(f.name)}</span>
-        <button class="btn-file-compact" onclick="openLink('${escHtml(f.path)}')">Открыть</button>
-        <button class="btn-file-danger" onclick="deleteFileFromOrder('${clientId}', '${order.id}', '${escHtml(f.name)}')">Удалить</button>
-      </div>
-    `).join("");
+        <button class="btn-file-compact" onclick="openFolder('${jsEscape(f.path)}')">📂</button>
+        <button class="btn-file-compact" onclick="renameFileInOrder('${clientId}', '${order.id}', '${jsEscape(f.name)}')">✏️</button>
+        <button class="btn-file-danger" onclick="deleteFileFromOrder('${clientId}', '${order.id}', '${jsEscape(f.name)}')">🗑</button>
+      </div>`;
+    }).join("");
   } else {
     filesListHtml = `<div class="drag-hint-box">Перетащите файлы сюда</div>`;
   }
 
   return `
-    <div class="order-card${isDone ? " done" : ""}" id="order-card-${order.id}">
+    <div class="order-card${isDone ? " done" : ""}" id="order-card-${order.id}" data-client-id="${clientId}" data-order-id="${order.id}">
       <div class="order-header" id="order-hdr-${order.id}">
         <button class="toggle-btn" id="toggle-${order.id}">${isExpanded ? "▲" : "▶"}</button>
         <span class="order-service-type">${escHtml(order.service_type)}</span>
@@ -622,16 +668,76 @@ function bindOrderCardEvents(clientId: string, order: Order) {
   });
 
   const priceInput = el(`price-${oid}`) as HTMLInputElement;
-  priceInput?.addEventListener("change", () => onPriceChange(clientId, oid, parseFloat(priceInput.value) || 0));
+  priceInput?.addEventListener("change", () => {
+    const val = parseFloat(priceInput.value);
+    if (!isFinite(val)) {
+      alert("Введите корректное число для стоимости");
+      priceInput.value = String(order.price);
+      return;
+    }
+    onPriceChange(clientId, oid, val);
+  });
 
   const advInput = el(`advance-${oid}`) as HTMLInputElement;
-  advInput?.addEventListener("change", () => onAdvanceChange(clientId, oid, parseFloat(advInput.value) || 0));
+  advInput?.addEventListener("change", () => {
+    const val = parseFloat(advInput.value);
+    if (!isFinite(val)) {
+      alert("Введите корректное число для аванса");
+      advInput.value = String(order.advance);
+      return;
+    }
+    onAdvanceChange(clientId, oid, val);
+  });
 
   el(`btn-pay-add-${oid}`)?.addEventListener("click", () => openAddPaymentModal(clientId, oid));
   el(`btn-pay-hist-${oid}`)?.addEventListener("click", () => openPaymentHistoryModal(clientId, oid));
 
-  el(`btn-add-file-${oid}`)?.addEventListener("click", () => alert("Перетащите файлы в блок файлов или добавьте их через диалог."));
-  el(`btn-export-zip-${oid}`)?.addEventListener("click", () => alert("Экспорт файлов в ZIP выполнен."));
+  el(`btn-add-file-${oid}`)?.addEventListener("click", async () => {
+    console.log(`UI btn-add-file: clientId=${clientId}, orderId=${oid}`);
+    const dbDir = await invoke<string>("get_db_dir");
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.addEventListener("change", async () => {
+      const files = input.files;
+      if (!files || !files.length) {
+        console.warn(`btn-add-file: no files selected`);
+        return;
+      }
+      const client = clients.find(c => c.id === clientId);
+      const order = client?.orders.find(o => o.id === oid);
+      if (!client || !order) {
+        console.warn(`btn-add-file: client/order not found`);
+        return;
+      }
+      console.log(`btn-add-file: ${files.length} file(s) selected`);
+      let added = 0;
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const targetDir = `${dbDir}/attached_files/${clientId}/${oid}`;
+        try {
+          // Read file content in JS (Tauri v2 doesn't expose File.path)
+          const buf = await f.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          console.log(`IPC → save_file_bytes: name=${f.name}, size=${bytes.length}`);
+          const newPath = await invoke<string>("save_file_bytes", { dir: targetDir, name: f.name, content: Array.from(bytes) });
+          console.log(`IPC ← save_file_bytes: ${newPath}`);
+          order.files.push({ path: newPath, name: f.name, is_finished: false, is_folder: false });
+          added++;
+        } catch (e) {
+          console.warn("Failed to save file:", f.name, e);
+        }
+      }
+      if (added > 0) {
+        console.log(`  → ${added} files added`);
+        clients = await apiSaveClient(client);
+        renderClientProfile();
+        setStatus(`Добавлено ${added} файлов`, "saved");
+      }
+    });
+    input.click();
+  });
+  el(`btn-export-zip-${oid}`)?.addEventListener("click", () => exportOrderFilesZip(clientId, oid));
 }
 
 function toggleOrderBody(orderId: string) {
@@ -639,6 +745,7 @@ function toggleOrderBody(orderId: string) {
   const btn = el(`toggle-${orderId}`);
   if (!body) return;
   const isVisible = body.style.display !== "none";
+  console.log(`UI toggleOrderBody: orderId=${orderId}, collapsing=${!isVisible}`);
   body.style.display = isVisible ? "none" : "flex";
   if (btn) btn.textContent = isVisible ? "▶" : "▲";
   if (isVisible) collapsedOrders.add(orderId);
@@ -653,12 +760,17 @@ function updateOrderDebtDisplay(clientId: string, orderId: string) {
   const debt = orderDebt(order);
   const debtEl = el(`debt-${orderId}`);
   if (debtEl) debtEl.textContent = formatMoney(debt);
+  console.debug(`UI updateOrderDebtDisplay: orderId=${orderId}, debt=${debt}`);
 }
 
 async function onStatusChange(clientId: string, orderId: string, done: boolean) {
+  console.log(`UI onStatusChange: clientId=${clientId}, orderId=${orderId}, done=${done}`);
   const client = clients.find(c => c.id === clientId);
   const order = client?.orders.find(o => o.id === orderId);
-  if (!order || !client) return;
+  if (!order || !client) {
+    console.warn(`onStatusChange: client/order not found`);
+    return;
+  }
 
   order.status = done ? "Завершен" : "В работе";
   const card = el(`order-card-${orderId}`);
@@ -670,8 +782,12 @@ async function onStatusChange(clientId: string, orderId: string, done: boolean) 
 }
 
 async function onDeleteOrder(clientId: string, orderId: string) {
+  console.log(`UI onDeleteOrder: clientId=${clientId}, orderId=${orderId}`);
   const confirmed = await showConfirm("Удалить заказ?", "Заказ и все его платежи будут безвозвратно удалены.");
-  if (!confirmed) return;
+  if (!confirmed) {
+    console.log(`  → user cancelled`);
+    return;
+  }
 
   clients = await apiDeleteOrder(clientId, orderId);
   renderDashboard();
@@ -686,6 +802,7 @@ async function onOrderDateChange(clientId: string, orderId: string, field: "crea
   if (!order || !client) return;
 
   const dateStr = inputToDate(inputValue);
+  console.log(`UI onOrderDateChange: orderId=${orderId}, field=${field}, value=${dateStr}`);
   order[field] = field === "created_at"
     ? (dateStr ? dateStr + " 00:00" : "")
     : dateStr;
@@ -694,17 +811,28 @@ async function onOrderDateChange(clientId: string, orderId: string, field: "crea
 }
 
 async function onPriceChange(clientId: string, orderId: string, newPrice: number) {
+  console.log(`UI onPriceChange: orderId=${orderId}, newPrice=${newPrice}`);
   const client = clients.find(c => c.id === clientId);
   const order = client?.orders.find(o => o.id === orderId);
-  if (!order || !client) return;
+  if (!order || !client) {
+    console.warn(`onPriceChange: client/order not found`);
+    return;
+  }
+
+  if (!isFinite(newPrice)) {
+    console.warn(`onPriceChange: invalid price`);
+    (el(`price-${orderId}`) as HTMLInputElement).value = String(order.price);
+    return;
+  }
 
   if (newPrice < 0) {
+    console.warn(`onPriceChange: negative price rejected`);
     alert("Стоимость не может быть отрицательной");
     (el(`price-${orderId}`) as HTMLInputElement).value = String(order.price);
     return;
   }
 
-  const totalReceived = orderTotalReceived(order);
+  const totalReceived = orderRealReceived(order);
 
   if (newPrice < totalReceived) {
     const diff = totalReceived - newPrice;
@@ -735,13 +863,6 @@ async function onPriceChange(clientId: string, orderId: string, newPrice: number
       (el(`price-${orderId}`) as HTMLInputElement).value = String(order.price);
       return;
     }
-    order.payments.push({
-      id: generateUUID(),
-      type: "аванс",
-      amount: -diff,
-      date: nowDatetime(),
-      note: "Возврат части аванса из-за уменьшения стоимости",
-    });
     order.advance = newPrice;
     (el(`advance-${orderId}`) as HTMLInputElement).value = String(newPrice);
     order.price = newPrice;
@@ -756,11 +877,22 @@ async function onPriceChange(clientId: string, orderId: string, newPrice: number
 }
 
 async function onAdvanceChange(clientId: string, orderId: string, newAdvance: number) {
+  console.log(`UI onAdvanceChange: orderId=${orderId}, newAdvance=${newAdvance}`);
   const client = clients.find(c => c.id === clientId);
   const order = client?.orders.find(o => o.id === orderId);
-  if (!order || !client) return;
+  if (!order || !client) {
+    console.warn(`onAdvanceChange: client/order not found`);
+    return;
+  }
+
+  if (!isFinite(newAdvance)) {
+    console.warn(`onAdvanceChange: invalid advance`);
+    (el(`advance-${orderId}`) as HTMLInputElement).value = String(order.advance);
+    return;
+  }
 
   if (newAdvance < 0) {
+    console.warn(`onAdvanceChange: negative advance rejected`);
     alert("Аванс не может быть отрицательным");
     (el(`advance-${orderId}`) as HTMLInputElement).value = String(order.advance);
     return;
@@ -773,15 +905,20 @@ async function onAdvanceChange(clientId: string, orderId: string, newAdvance: nu
   }
 
   const diff = newAdvance - order.advance;
-  if (Math.abs(diff) < 0.001) return;
+  if (Math.abs(diff) < 0.001) {
+    (el(`advance-${orderId}`) as HTMLInputElement).value = String(order.advance);
+    return;
+  }
 
-  order.payments.push({
-    id: generateUUID(),
-    type: "аванс",
-    amount: diff,
-    date: nowDatetime(),
-    note: diff > 0 ? "Внесён аванс" : "Возврат аванса",
-  });
+  if (diff > 0) {
+    order.payments.push({
+      id: generateUUID(),
+      type: "аванс",
+      amount: diff,
+      date: nowDatetime(),
+      note: "Внесён аванс",
+    });
+  }
   order.advance = newAdvance;
 
   updateOrderDebtDisplay(clientId, orderId);
@@ -807,18 +944,32 @@ function onNotesChange() {
 
 async function saveNotes() {
   const client = getSelectedClient();
-  if (!client) return;
+  if (!client) {
+    console.warn("saveNotes: no client selected");
+    return;
+  }
   const textarea = el("notes-textarea") as HTMLTextAreaElement;
-  if (!textarea) return;
+  if (!textarea) {
+    console.warn("saveNotes: textarea not found");
+    return;
+  }
   client.notes = textarea.value;
+  console.log(`UI saveNotes: client=${client.id}, notes length=${client.notes.length}`);
   clients = await apiSaveClient(client);
 }
 
 // Modals
-function openModal(id: string) { (el(id) as HTMLDialogElement)?.showModal(); }
-function closeModal(id: string) { (el(id) as HTMLDialogElement)?.close(); }
+function openModal(id: string) {
+  console.log(`UI openModal: ${id}`);
+  (el(id) as HTMLDialogElement)?.showModal();
+}
+function closeModal(id: string) {
+  console.log(`UI closeModal: ${id}`);
+  (el(id) as HTMLDialogElement)?.close();
+}
 
 function showConfirm(title: string, message: string): Promise<boolean> {
+  console.log(`UI showConfirm: "${title}" — "${message.substring(0, 80)}..."`);
   return new Promise((resolve) => {
     (el("confirm-title") as HTMLElement).textContent = title;
     (el("confirm-message") as HTMLElement).textContent = message;
@@ -826,20 +977,25 @@ function showConfirm(title: string, message: string): Promise<boolean> {
 
     const okBtn = el("confirm-ok")!;
     const cancelBtn = el("confirm-cancel")!;
+    const modal = el("modal-confirm") as HTMLDialogElement;
 
     const cleanup = () => {
       okBtn.removeEventListener("click", onOk);
       cancelBtn.removeEventListener("click", onCancel);
+      modal.removeEventListener("close", onClose);
       closeModal("modal-confirm");
     };
-    const onOk = () => { cleanup(); resolve(true); };
-    const onCancel = () => { cleanup(); resolve(false); };
+    const onOk = () => { console.log(`  → confirm OK`); cleanup(); resolve(true); };
+    const onCancel = () => { console.log(`  → confirm Cancel`); cleanup(); resolve(false); };
+    const onClose = () => { console.log(`  → confirm Close`); cleanup(); resolve(false); };
     okBtn.addEventListener("click", onOk);
     cancelBtn.addEventListener("click", onCancel);
+    modal.addEventListener("close", onClose);
   });
 }
 
 function openAddClientModal() {
+  console.log(`UI openAddClientModal`);
   (el("modal-client-title") as HTMLElement).textContent = "Новый клиент";
   (el("client-id") as HTMLInputElement).value = "";
   (el("client-name") as HTMLInputElement).value = "";
@@ -851,6 +1007,7 @@ function openAddClientModal() {
 }
 
 function openClientSettingsModal(client: Client) {
+  console.log(`UI openClientSettingsModal: client=${client.id} "${client.name}"`);
   (el("cs-client-id") as HTMLInputElement).value = client.id;
   (el("cs-name") as HTMLInputElement).value = client.name;
   (el("cs-email") as HTMLInputElement).value = client.email;
@@ -860,6 +1017,7 @@ function openClientSettingsModal(client: Client) {
 }
 
 function openAddOrderModal(clientId: string) {
+  console.log(`UI openAddOrderModal: clientId=${clientId}`);
   (el("order-client-id") as HTMLInputElement).value = clientId;
   (el("order-service-select") as HTMLSelectElement).value = "Монтаж звука";
   el("order-service-custom-wrap")!.style.display = "none";
@@ -871,6 +1029,7 @@ function openAddOrderModal(clientId: string) {
 }
 
 function openAddPaymentModal(clientId: string, orderId: string) {
+  console.log(`UI openAddPaymentModal: clientId=${clientId}, orderId=${orderId}`);
   const client = clients.find(c => c.id === clientId);
   const order = client?.orders.find(o => o.id === orderId);
 
@@ -886,9 +1045,13 @@ function openAddPaymentModal(clientId: string, orderId: string) {
 }
 
 function openPaymentHistoryModal(clientId: string, orderId: string) {
+  console.log(`UI openPaymentHistoryModal: clientId=${clientId}, orderId=${orderId}`);
   const client = clients.find(c => c.id === clientId);
   const order = client?.orders.find(o => o.id === orderId);
-  if (!order) return;
+  if (!order) {
+    console.warn(`openPaymentHistoryModal: order not found`);
+    return;
+  }
 
   (el("ph-client-id") as HTMLInputElement).value = clientId;
   (el("ph-order-id") as HTMLInputElement).value = orderId;
@@ -898,7 +1061,7 @@ function openPaymentHistoryModal(clientId: string, orderId: string) {
 }
 
 function renderPaymentHistory(order: Order, clientId: string) {
-  const totalReceived = orderTotalReceived(order);
+  const totalReceived = orderRealReceived(order);
   const debt = orderDebt(order);
 
   el("ph-stats")!.innerHTML = `
@@ -915,8 +1078,8 @@ function renderPaymentHistory(order: Order, clientId: string) {
       <span class="ph-stat-value" style="color:var(--color-success)">${formatMoney(totalReceived, order.currency)}</span>
     </div>
     <div class="ph-stat">
-      <span class="ph-stat-label">Долг</span>
-      <span class="ph-stat-value" style="color:${debt > 0 ? "var(--color-red)" : "var(--color-success)"}">${formatMoney(debt, order.currency)}</span>
+      <span class="ph-stat-label">${debt < 0 ? "Переплата" : "Долг"}</span>
+      <span class="ph-stat-value" style="color:${debt > 0 ? "var(--color-red)" : debt < 0 ? "var(--color-success)" : ""}">${formatMoney(debt, order.currency)}</span>
     </div>
   `;
 
@@ -977,8 +1140,8 @@ function paymentItemHtml(p: Payment, clientId: string, orderId: string, currency
 }
 
 function openSettingsModal() {
-  (el("set-deadline-notify") as HTMLInputElement).checked = appSettings.deadline_notifications;
-  openModal("modal-settings");
+  console.log(`UI openSettingsModal`);
+  invoke("open_settings_window").catch(e => console.error("Failed to open settings window:", e));
 }
 
 function setupFormListeners() {
@@ -988,11 +1151,14 @@ function setupFormListeners() {
     const id = (el("client-id") as HTMLInputElement).value || generateUUID();
     const name = (el("client-name") as HTMLInputElement).value.trim();
     if (!name) {
+      console.warn(`form-client submit: empty name`);
       alert("Введите имя или название клиента");
       return;
     }
 
     const existing = clients.find(c => c.id === id);
+    const isNew = !existing;
+    console.log(`UI form-client submit: id=${id}, name="${name}", isNew=${isNew}`);
     const newClient: Client = {
       id,
       name,
@@ -1016,22 +1182,28 @@ function setupFormListeners() {
     e.preventDefault();
     const clientId = (el("order-client-id") as HTMLInputElement).value;
     const client = clients.find(c => c.id === clientId);
-    if (!client) return;
+    if (!client) {
+      console.warn(`form-order submit: client ${clientId} not found`);
+      return;
+    }
 
     const serviceSelect = el("order-service-select") as HTMLSelectElement;
     let serviceType = serviceSelect.value;
     if (serviceType === "__custom__") {
       serviceType = (el("order-service-custom") as HTMLInputElement).value.trim();
-      if (!serviceType) { alert("Введите тип услуги"); return; }
+      if (!serviceType) { console.warn(`form-order: empty custom service`); alert("Введите тип услуги"); return; }
     }
 
-    const price = parseFloat((el("order-price") as HTMLInputElement).value) || 0;
+    const price = parseFloat((el("order-price") as HTMLInputElement).value);
     const currency = (el("order-currency") as HTMLSelectElement).value;
-    const advance = parseFloat((el("order-advance") as HTMLInputElement).value) || 0;
+    const advance = parseFloat((el("order-advance") as HTMLInputElement).value);
     const deadlineInput = (el("order-deadline") as HTMLInputElement).value;
+    console.log(`UI form-order submit: client=${clientId}, service=${serviceType}, price=${price}, advance=${advance}`);
 
-    if (price < 0) { alert("Стоимость не может быть отрицательной"); return; }
-    if (advance < 0) { alert("Аванс не может быть отрицательным"); return; }
+    if (!isFinite(price)) { console.warn(`form-order: invalid price`); alert("Введите корректную стоимость"); return; }
+    if (!isFinite(advance)) { console.warn(`form-order: invalid advance`); alert("Введите корректный аванс"); return; }
+    if (price < 0) { console.warn(`form-order: negative price`); alert("Стоимость не может быть отрицательной"); return; }
+    if (advance < 0) { console.warn(`form-order: negative advance`); alert("Аванс не может быть отрицательным"); return; }
 
     const newOrder: Order = {
       id: generateUUID(),
@@ -1071,16 +1243,22 @@ function setupFormListeners() {
     e.preventDefault();
     const clientId = (el("payment-client-id") as HTMLInputElement).value;
     const orderId = (el("payment-order-id") as HTMLInputElement).value;
+    console.log(`UI form-payment submit: clientId=${clientId}, orderId=${orderId}`);
     const client = clients.find(c => c.id === clientId);
     const order = client?.orders.find(o => o.id === orderId);
-    if (!client || !order) return;
+    if (!client || !order) {
+      console.warn(`form-payment: client/order not found`);
+      return;
+    }
 
     const paymentType = (el("payment-type") as HTMLSelectElement).value;
-    const amount = parseFloat((el("payment-amount") as HTMLInputElement).value) || 0;
+    const amount = parseFloat((el("payment-amount") as HTMLInputElement).value);
     const dateInput = (el("payment-date") as HTMLInputElement).value;
     const note = (el("payment-note") as HTMLInputElement).value.trim();
+    console.log(`  → type=${paymentType}, amount=${amount}, date=${dateInput}`);
 
-    if (amount === 0) { alert("Сумма не может быть нулём"); return; }
+    if (!isFinite(amount)) { console.warn(`form-payment: invalid amount`); alert("Введите корректную сумму"); return; }
+    if (amount === 0) { console.warn(`form-payment: zero amount rejected`); alert("Сумма не может быть нулём"); return; }
 
     const dateStr = dateInput ? inputToDate(dateInput) + " 00:00" : nowDatetime();
 
@@ -1092,11 +1270,11 @@ function setupFormListeners() {
       note,
     });
 
-    if (paymentType === "аванс" && amount > 0) {
+    if (paymentType === "аванс") {
       const totalAdvanceReceived = order.payments
         .filter(p => p.type === "аванс")
         .reduce((s, p) => s + p.amount, 0);
-      order.advance = Math.max(order.advance, totalAdvanceReceived);
+      order.advance = Math.max(0, totalAdvanceReceived);
     }
 
     clients = await apiSaveClient(client);
@@ -1111,14 +1289,18 @@ function setupFormListeners() {
   el("cs-save-btn")!.addEventListener("click", async () => {
     const id = (el("cs-client-id") as HTMLInputElement).value;
     const client = clients.find(c => c.id === id);
-    if (!client) return;
+    if (!client) {
+      console.warn(`cs-save-btn: client ${id} not found`);
+      return;
+    }
 
     client.name = (el("cs-name") as HTMLInputElement).value.trim();
     client.email = (el("cs-email") as HTMLInputElement).value.trim();
     client.social_link = (el("cs-social") as HTMLInputElement).value.trim();
     client.notes = (el("cs-notes") as HTMLTextAreaElement).value;
+    console.log(`UI cs-save-btn: saving client settings for "${client.name}"`);
 
-    if (!client.name) { alert("Имя обязательно"); return; }
+    if (!client.name) { console.warn(`cs-save-btn: empty name`); alert("Имя обязательно"); return; }
 
     clients = await apiSaveClient(client);
     closeModal("modal-client-settings");
@@ -1130,13 +1312,17 @@ function setupFormListeners() {
   el("cs-delete-btn")!.addEventListener("click", async () => {
     const id = (el("cs-client-id") as HTMLInputElement).value;
     const client = clients.find(c => c.id === id);
-    if (!client) return;
+    if (!client) {
+      console.warn(`cs-delete-btn: client ${id} not found`);
+      return;
+    }
+    console.log(`UI cs-delete-btn: deleting client "${client.name}" (${id})`);
 
     const ok = await showConfirm(
       "Удалить клиента?",
       `Клиент "${client.name}" и все его заказы будут безвозвратно удалены.`
     );
-    if (!ok) return;
+    if (!ok) { console.log(`  → cancelled`); return; }
 
     clients = await apiDeleteClient(id);
     if (selectedClientId === id) {
@@ -1152,8 +1338,23 @@ function setupFormListeners() {
   el("cs-export-json")!.addEventListener("click", () => {
     const id = (el("cs-client-id") as HTMLInputElement).value;
     const client = clients.find(c => c.id === id);
-    if (!client) return;
+    if (!client) {
+      console.warn(`cs-export-json: client ${id} not found`);
+      return;
+    }
+    console.log(`UI cs-export-json: exporting "${client.name}"`);
     exportClientJson(client);
+  });
+
+  el("cs-export-files-zip")!.addEventListener("click", () => {
+    const id = (el("cs-client-id") as HTMLInputElement).value;
+    const client = clients.find(c => c.id === id);
+    if (!client) {
+      console.warn(`cs-export-files-zip: client ${id} not found`);
+      return;
+    }
+    console.log(`UI cs-export-files-zip: exporting files for "${client.name}"`);
+    exportClientFilesZip(id);
   });
 
   (el("order-service-select") as HTMLSelectElement).addEventListener("change", (e) => {
@@ -1166,24 +1367,63 @@ function setupFormListeners() {
     saveSettings(appSettings);
   });
 
+  el("set-browse-db")!.addEventListener("click", async () => {
+    console.log(`UI set-browse-db`);
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "Выберите папку для хранения БД" });
+      if (selected) {
+        console.log(`  → selected: ${selected}`);
+        await invoke("save_db_dir", { dir: selected });
+        (el("set-db-path") as HTMLInputElement).value = selected;
+        setStatus("Путь к БД сохранён. Перезапустите программу.", "saved");
+      }
+    } catch (e) {
+      console.error("set-browse-db error:", e);
+    }
+  });
+
   el("set-export-json")!.addEventListener("click", () => {
+    console.log(`UI set-export-json: exporting ${clients.length} clients`);
     const json = JSON.stringify(clients, null, 2);
     downloadFile("financefugue_export.json", json, "application/json");
   });
 
+  el("set-backup-zip")!.addEventListener("click", () => {
+    console.log(`UI set-backup-zip`);
+    exportFullBackup();
+  });
+
+  el("set-import-folder")!.addEventListener("click", () => {
+    console.log(`UI set-import-folder`);
+    importFromFolder();
+  });
+
+  el("set-delete-files")!.addEventListener("click", () => {
+    console.log(`UI set-delete-files`);
+    deleteAllFiles();
+  });
+
+  el("set-delete-db")!.addEventListener("click", () => {
+    console.log(`UI set-delete-db`);
+    deleteDatabaseFull();
+  });
+
   el("set-import-json")!.addEventListener("click", async () => {
+    console.log(`UI set-import-json`);
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".json";
     input.addEventListener("change", async () => {
       const file = input.files?.[0];
-      if (!file) return;
+      if (!file) { console.warn(`import-json: no file selected`); return; }
       try {
         const text = await file.text();
+        console.log(`  → read ${text.length} bytes`);
         const imported: Client[] = JSON.parse(text);
         if (!Array.isArray(imported)) throw new Error("Неверный формат файла");
+        console.log(`  → parsed ${imported.length} clients`);
         const ok = await showConfirm("Импорт данных", `Будет загружено ${imported.length} клиентов. Продолжить?`);
-        if (!ok) return;
+        if (!ok) { console.log(`  → user cancelled`); return; }
         for (const client of imported) {
           clients = await apiSaveClient(client);
         }
@@ -1191,9 +1431,9 @@ function setupFormListeners() {
         renderDashboard();
         renderClientList();
         renderClientProfile();
-        closeModal("modal-settings");
         setStatus(`Импортировано ${imported.length} клиентов`, "saved");
       } catch (err) {
+        console.error(`import-json error:`, err);
         alert(`Ошибка импорта: ${err}`);
       }
     });
@@ -1203,6 +1443,7 @@ function setupFormListeners() {
 
 function showContextMenu(e: MouseEvent, clientId: string) {
   e.preventDefault();
+  console.log(`UI showContextMenu: clientId=${clientId}`);
   ctxClientId = clientId;
   const menu = el("context-menu")!;
   menu.style.display = "block";
@@ -1217,6 +1458,7 @@ function hideContextMenu() {
 
 function setupContextMenu() {
   el("cm-add-order")!.addEventListener("click", () => {
+    console.log(`UI cm-add-order: ctxClientId=${ctxClientId}`);
     if (ctxClientId) {
       selectClient(ctxClientId);
       openAddOrderModal(ctxClientId);
@@ -1225,6 +1467,7 @@ function setupContextMenu() {
   });
 
   el("cm-edit-client")!.addEventListener("click", () => {
+    console.log(`UI cm-edit-client: ctxClientId=${ctxClientId}`);
     if (ctxClientId) {
       const client = clients.find(c => c.id === ctxClientId);
       if (client) {
@@ -1238,11 +1481,12 @@ function setupContextMenu() {
   el("cm-delete-client")!.addEventListener("click", async () => {
     const id = ctxClientId;
     hideContextMenu();
-    if (!id) return;
+    if (!id) { console.warn(`cm-delete-client: no ctxClientId`); return; }
     const client = clients.find(c => c.id === id);
-    if (!client) return;
+    if (!client) { console.warn(`cm-delete-client: client ${id} not found`); return; }
+    console.log(`UI cm-delete-client: deleting "${client.name}"`);
     const ok = await showConfirm("Удалить клиента?", `Клиент "${client.name}" и все его заказы будут удалены.`);
-    if (!ok) return;
+    if (!ok) { console.log(`  → cancelled`); return; }
     clients = await apiDeleteClient(id);
     if (selectedClientId === id) selectedClientId = clients.length > 0 ? clients[0].id : null;
     renderDashboard();
@@ -1272,7 +1516,9 @@ function checkDeadlineNotifications() {
       }
     }
   }
+  console.log(`checkDeadlineNotifications: ${alerts.length} alert(s)`);
   if (alerts.length > 0) {
+    console.warn(`Deadline alerts:`, alerts);
     setStatus(`⚠ Дедлайны: ${alerts.length} заказ(ов) требуют внимания`, "error", 10000);
   }
 }
@@ -1280,6 +1526,7 @@ function checkDeadlineNotifications() {
 function setupKeyboardShortcuts() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      console.log(`KB: Escape`);
       document.querySelectorAll("dialog[open]").forEach(d => (d as HTMLDialogElement).close());
       hideContextMenu();
       return;
@@ -1289,28 +1536,59 @@ function setupKeyboardShortcuts() {
       switch (e.key.toLowerCase()) {
         case "n":
           e.preventDefault();
+          console.log(`KB: Ctrl+N — new client`);
           openAddClientModal();
           break;
         case "f":
           e.preventDefault();
+          console.log(`KB: Ctrl+F — focus search`);
           const search = el("search-input") as HTMLInputElement;
           search?.focus();
           search?.select();
           break;
         case ",":
           e.preventDefault();
+          console.log(`KB: Ctrl+, — settings`);
           openSettingsModal();
           break;
         case "s":
           e.preventDefault();
-          const client = getSelectedClient();
-          if (client) {
-            apiSaveClient(client).then(updated => {
-              clients = updated;
-              setStatus("Сохранено вручную", "saved");
-            });
+          if (e.shiftKey) {
+            console.log(`KB: Ctrl+Shift+S — settings`);
+            openSettingsModal();
+          } else {
+            console.log(`KB: Ctrl+S — save`);
+            const client = getSelectedClient();
+            if (client) {
+              apiSaveClient(client)
+                .then(updated => { clients = updated; setStatus("Сохранено вручную", "saved"); })
+                .catch(e => setStatus(`Ошибка сохранения: ${e}`, "error"));
+            }
           }
           break;
+        case "o":
+          e.preventDefault();
+          console.log(`KB: Ctrl+O — file manager`);
+          openFileManager();
+          break;
+        case "q":
+          e.preventDefault();
+          console.log(`KB: Ctrl+Q — quit`);
+          window.close();
+          break;
+      }
+    } else if (e.key === "F5") {
+      e.preventDefault();
+      console.log(`KB: F5 — refresh`);
+      renderDashboard();
+      renderClientList();
+      renderClientProfile();
+      setStatus("Обновлено", "saved");
+    } else if (e.key === "Delete" && selectedClientId) {
+      const client = clients.find(c => c.id === selectedClientId);
+      if (client && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+        console.log(`KB: Delete — delete current client`);
+        onDeleteCurrentClient();
       }
     }
   });
@@ -1322,6 +1600,10 @@ function escHtml(s: string): string {
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
 
+function jsEscape(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+}
+
 function downloadFile(name: string, content: string, type: string) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -1331,12 +1613,493 @@ function downloadFile(name: string, content: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
+async function downloadBlob(name: string, data: number[], type: string) {
+  const blob = new Blob([Uint8Array.from(data)], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function exportClientJson(client: Client) {
+  console.log(`UI exportClientJson: "${client.name}"`);
   downloadFile(
     `${client.name.replace(/\s+/g,"_")}_orders.json`,
     JSON.stringify({ client: { name: client.name, email: client.email }, orders: client.orders }, null, 2),
     "application/json"
   );
+}
+
+async function exportFullBackup() {
+  console.log(`UI exportFullBackup: collecting files from ${clients.length} clients`);
+  const filePaths: string[] = [];
+  for (const c of clients) {
+    for (const o of c.orders) {
+      for (const f of o.files) {
+        if (f.path && !filePaths.includes(f.path)) filePaths.push(f.path);
+      }
+    }
+  }
+  console.log(`  → ${filePaths.length} files to backup`);
+  const dbJson = JSON.stringify(clients, null, 2);
+  try {
+    console.log(`IPC → create_backup_zip`);
+    const zipData = await invoke<number[]>("create_backup_zip", { filePaths, dbJson });
+    console.log(`IPC ← create_backup_zip: ${zipData.length} bytes`);
+    await downloadBlob(`financefugue_backup_${Date.now()}.zip`, zipData, "application/zip");
+    setStatus("Бэкап ZIP создан", "saved");
+  } catch (e) {
+    console.error(`exportFullBackup error:`, e);
+    setStatus(`Ошибка бэкапа: ${e}`, "error");
+  }
+}
+
+async function exportOrderFilesZip(clientId: string, orderId: string) {
+  console.log(`UI exportOrderFilesZip: clientId=${clientId}, orderId=${orderId}`);
+  const client = clients.find(c => c.id === clientId);
+  const order = client?.orders.find(o => o.id === orderId);
+  if (!order || !order.files.length) {
+    console.warn(`exportOrderFilesZip: no files found`);
+    setStatus("Нет файлов для экспорта", "normal");
+    return;
+  }
+  const filePaths = order.files.map(f => f.path);
+  console.log(`  → ${filePaths.length} files to export`);
+  try {
+    console.log(`IPC → export_files_zip`);
+    const zipData = await invoke<number[]>("export_files_zip", { filePaths });
+    console.log(`IPC ← export_files_zip: ${zipData.length} bytes`);
+    const name = `${order.service_type.replace(/\s+/g,"_")}_files_${Date.now()}.zip`;
+    await downloadBlob(name, zipData, "application/zip");
+    setStatus("Файлы заказа экспортированы", "saved");
+  } catch (e) {
+    console.error(`exportOrderFilesZip error:`, e);
+    setStatus(`Ошибка экспорта: ${e}`, "error");
+  }
+}
+
+async function exportClientFilesZip(clientId: string) {
+  console.log(`UI exportClientFilesZip: clientId=${clientId}`);
+  const client = clients.find(c => c.id === clientId);
+  if (!client) { console.warn(`exportClientFilesZip: client not found`); return; }
+  const filePaths: string[] = [];
+  for (const o of client.orders) {
+    for (const f of o.files) {
+      if (f.path && !filePaths.includes(f.path)) filePaths.push(f.path);
+    }
+  }
+  if (!filePaths.length) {
+    console.warn(`exportClientFilesZip: no files`);
+    setStatus("Нет файлов для экспорта", "normal");
+    return;
+  }
+  console.log(`  → ${filePaths.length} files to export`);
+  try {
+    console.log(`IPC → export_files_zip`);
+    const zipData = await invoke<number[]>("export_files_zip", { filePaths });
+    console.log(`IPC ← export_files_zip: ${zipData.length} bytes`);
+    const name = `${client.name.replace(/\s+/g,"_")}_files_${Date.now()}.zip`;
+    await downloadBlob(name, zipData, "application/zip");
+    setStatus("Файлы клиента экспортированы", "saved");
+  } catch (e) {
+    console.error(`exportClientFilesZip error:`, e);
+    setStatus(`Ошибка экспорта: ${e}`, "error");
+  }
+}
+
+async function importFromFolder() {
+  console.log(`UI importFromFolder`);
+  const input = document.getElementById("folder-importer") as HTMLInputElement;
+  input.value = "";
+  input.click();
+  input.onchange = async () => {
+    const files = input.files;
+    if (!files || !files.length) { console.warn(`importFromFolder: no files selected`); return; }
+    const folderName = files[0].webkitRelativePath.split("/")[0];
+    const clientName = folderName.replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
+    console.log(`  → folder="${folderName}", clientName="${clientName}", ${files.length} files`);
+    if (!clientName) { alert("Не удалось определить имя клиента из имени папки"); return; }
+    const ok = await showConfirm(
+      "Импорт из папки",
+      `Импортировать файлы из "${folderName}" как клиента "${clientName}"?`
+    );
+    if (!ok) { console.log(`  → cancelled`); return; }
+    let existing = clients.find(c => c.name.toLowerCase() === clientName.toLowerCase());
+    if (!existing) {
+      existing = {
+        id: generateUUID(),
+        name: clientName,
+        email: "", social_link: "", notes: "",
+        orders: [],
+      };
+      clients.push(existing);
+      console.log(`  → created new client "${clientName}"`);
+    }
+    let fileCount = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const relPath = file.webkitRelativePath;
+      const parts = relPath.split("/");
+      const orderName = parts.length > 2 ? parts[1] : "Разное";
+      let order = existing.orders.find(o => o.service_type === orderName);
+      if (!order) {
+        order = {
+          id: generateUUID(),
+          service_type: orderName,
+          price: 0, currency: "RUB", advance: 0,
+          created_at: nowDatetime(), deadline: "", status: "В работе",
+          files: [], payments: [],
+        };
+        existing.orders.push(order);
+        console.log(`  → created order "${orderName}"`);
+      }
+      const path = file.name;
+      order.files.push({ path, name: file.name, is_finished: false, is_folder: false });
+      fileCount++;
+    }
+    console.log(`  → imported ${fileCount} files into ${existing.orders.length} orders`);
+    clients = await apiSaveClient(existing);
+    renderDashboard(); renderClientList(); renderClientProfile();
+    setStatus(`Импортировано ${fileCount} файлов`, "saved");
+  };
+}
+
+async function deleteAllFiles() {
+  console.log(`UI deleteAllFiles`);
+  const choice = await showConfirm("Удалить все файлы", "Удалить только из программы (ссылки) или удалить файлы с диска? Нажмите «Подтвердить» для удаления из программы, «Отмена» — для отмены.");
+  if (!choice) { console.log(`  → cancelled`); return; }
+  let total = 0;
+  for (const c of clients) {
+    for (const o of c.orders) {
+      const paths = o.files.map(f => f.path);
+      for (const p of paths) {
+        try { await invoke("delete_file", { path: p }); } catch (e) {
+          console.warn("deleteAllFiles: failed to delete from disk:", p, e);
+        }
+      }
+      total += o.files.length;
+      o.files = [];
+    }
+  }
+  console.log(`  → removed ${total} file references`);
+  const json = JSON.stringify(clients, null, 2);
+  clients = JSON.parse(json);
+  for (const c of clients) {
+    clients = await apiSaveClient(c);
+  }
+  renderDashboard(); renderClientList(); renderClientProfile();
+  setStatus("Все файлы удалены", "saved");
+}
+
+async function deleteDatabaseFull() {
+  console.log(`UI deleteDatabaseFull`);
+  const ok = await showConfirm(
+    "Очистить базу данных",
+    "Все клиенты, заказы и файлы будут безвозвратно удалены! Продолжить?"
+  );
+  if (!ok) { console.log(`  → cancelled`); return; }
+  const allPaths: string[] = [];
+  for (const c of clients) {
+    for (const o of c.orders) {
+      for (const f of o.files) {
+        if (f.path) allPaths.push(f.path);
+      }
+    }
+  }
+  console.log(`  → ${clients.length} clients, ${allPaths.length} files to clean up`);
+  try {
+    await invoke("delete_database");
+    console.log(`IPC ← delete_database: success`);
+    clients = [];
+    selectedClientId = null;
+  } catch (e) {
+    console.error(`deleteDatabaseFull: delete_database error:`, e);
+    setStatus(`Ошибка удаления БД: ${e}`, "error");
+    return;
+  }
+  for (const path of allPaths) {
+    try { await invoke("delete_file", { path }); } catch {}
+  }
+  renderDashboard(); renderClientList(); renderClientProfile();
+  setStatus("База данных очищена", "saved");
+}
+
+async function updateDbSizeDisplay() {
+  const btn = document.getElementById("set-db-size") as HTMLButtonElement;
+  if (!btn) return;
+  try {
+    console.log(`IPC → get_database_size`);
+    const size = await invoke<number>("get_database_size");
+    console.log(`IPC ← get_database_size: ${size} bytes`);
+    btn.textContent = size > 0 ? `Размер БД: ${(size / 1024).toFixed(1)} KB` : "Размер БД: —";
+  } catch (e) {
+    console.warn(`get_database_size error:`, e);
+    btn.textContent = "Размер БД: —";
+  }
+}
+
+// === FILE MANAGER ===
+
+function openFileManager() {
+  console.log(`UI openFileManager`);
+  renderFileManager();
+  openModal("modal-file-manager");
+}
+
+function renderFileManager() {
+  const tree = document.getElementById("fm-tree")!;
+  console.log(`UI renderFileManager`);
+  const allFiles: { client: Client; order: Order; file: ProjectFile }[] = [];
+  for (const c of clients) {
+    for (const o of c.orders) {
+      for (const f of o.files) {
+        allFiles.push({ client: c, order: o, file: f });
+      }
+    }
+  }
+  if (!allFiles.length) {
+    tree.innerHTML = `<div class="fm-empty">Файлов нет</div>`;
+    return;
+  }
+  let html = "";
+  const grouped: Record<string, Record<string, ProjectFile[]>> = {};
+  for (const { client, order, file } of allFiles) {
+    if (!grouped[client.id]) grouped[client.id] = {};
+    if (!grouped[client.id][order.id]) grouped[client.id][order.id] = [];
+    grouped[client.id][order.id].push(file);
+  }
+  for (const c of clients) {
+    if (!grouped[c.id]) continue;
+    html += `<div class="fm-client"><div class="fm-client-header">${escHtml(c.name)}</div>`;
+    for (const o of c.orders) {
+      if (!grouped[c.id][o.id]) continue;
+      html += `<div class="fm-order"><div class="fm-order-header">${escHtml(o.service_type)}</div><div class="fm-files">`;
+      for (const f of grouped[c.id][o.id]) {
+        const statusIcon = f.is_finished ? "✅" : "⏳";
+        html += `<div class="fm-file" data-path="${escHtml(f.path)}" data-name="${escHtml(f.name)}" data-cid="${c.id}" data-oid="${o.id}">
+          <span>${statusIcon}</span>
+          <span class="fm-file-name" title="${escHtml(f.path)}">${escHtml(f.name)}</span>
+          <span class="fm-file-actions">
+            <button class="fm-file-btn" data-action="open">📂</button>
+            <button class="fm-file-btn" data-action="rename">✏️</button>
+            <button class="fm-file-btn" data-action="toggle-status">${f.is_finished ? "🔄" : "✅"}</button>
+            <button class="fm-file-btn" data-action="delete" style="color:var(--color-danger)">🗑</button>
+          </span>
+        </div>`;
+      }
+      html += `</div></div>`;
+    }
+    html += `</div>`;
+  }
+  tree.innerHTML = html;
+
+  tree.querySelectorAll(".fm-file").forEach(el => {
+    const fileEl = el as HTMLElement;
+    const path = fileEl.dataset.path!;
+    const name = fileEl.dataset.name!;
+    const cid = fileEl.dataset.cid!;
+    const oid = fileEl.dataset.oid!;
+
+    fileEl.querySelectorAll("[data-action]").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const action = (btn as HTMLElement).dataset.action!;
+        switch (action) {
+          case "open":
+            {
+              const dir = parentDir(path);
+              console.log(`FM openFolder: file="${path}", dir="${dir}"`);
+              try { await invoke("open_path", { path: dir }); } catch { alert(`Не удалось открыть папку: ${dir}`); }
+            }
+            break;
+          case "rename":
+            (document.getElementById("rename-input") as HTMLInputElement).value = name;
+            (document.getElementById("rename-input") as HTMLInputElement).dataset.oldPath = path;
+            (document.getElementById("rename-input") as HTMLInputElement).dataset.cid = cid;
+            (document.getElementById("rename-input") as HTMLInputElement).dataset.oid = oid;
+            openModal("modal-rename");
+            break;
+          case "toggle-status":
+            {
+              const client = clients.find(x => x.id === cid);
+              const order = client?.orders.find(x => x.id === oid);
+              const file = order?.files.find(x => x.name === name);
+              if (file) {
+                file.is_finished = !file.is_finished;
+                clients = await apiSaveClient(client!);
+                renderFileManager();
+                renderClientProfile();
+              }
+            }
+            break;
+          case "delete":
+            {
+              const ok = await showConfirm("Удалить файл", `Удалить "${name}" из заказа?`);
+              if (!ok) return;
+              const client = clients.find(x => x.id === cid);
+              const order = client?.orders.find(x => x.id === oid);
+              if (order) {
+                order.files = order.files.filter(x => x.name !== name);
+                clients = await apiSaveClient(client!);
+                renderFileManager();
+                renderClientProfile();
+              }
+            }
+            break;
+        }
+      });
+    });
+  });
+}
+
+// === SYSTEM DIALOGS ===
+
+async function openAbout() {
+  console.log(`UI openAbout`);
+  const dbDir = await invoke<string>("get_db_dir");
+  const lines: string[] = [];
+  for (const name of ["LICENSE", "EULA.md", "THIRD_PARTY_LICENSES.txt"]) {
+    const tryPath = `${dbDir}/${name}`;
+    try {
+      console.log(`IPC → read_text_file: ${tryPath}`);
+      const text = await invoke<string>("read_text_file", { path: tryPath });
+      console.log(`IPC ← read_text_file: ${text.length} bytes`);
+      lines.push(`\n─── ${name} ───\n${text}`);
+    } catch {}
+  }
+  if (lines.length > 0) {
+    const aboutContent = el("about-dialog-content")!;
+    let html = `<div class="about-logo">💼 FinanceFugue</div>
+<div class="about-version">Версия 25.7.2026</div>
+<div class="about-desc">Профессиональный менеджер клиентов и заказов для фрилансеров</div>`;
+    for (const line of lines) {
+      html += `<pre style="font-size:10px;color:var(--color-text-dim);max-height:120px;overflow-y:auto;background:var(--color-bg-panel);padding:8px;border-radius:4px;margin-top:8px;text-align:left;white-space:pre-wrap;">${escHtml(line)}</pre>`;
+    }
+    aboutContent.innerHTML = html;
+  }
+  openModal("modal-about");
+}
+
+function openHelp() {
+  console.log(`UI openHelp`);
+  const helpPath = "help.html";
+  invoke("open_path", { path: helpPath }).catch(() => {
+    alert("Файл справки не найден. Откройте help.html вручную.");
+  });
+}
+
+function checkEula() {
+  const accepted = localStorage.getItem("ff_eula_accepted");
+  if (!accepted) {
+    alert(
+      "Добро пожаловать в FinanceFugue!\n\n" +
+      "Используя данное программное обеспечение, вы соглашаетесь с условиями лицензионного соглашения (EULA).\n\n" +
+      "Приложение предоставляется «как есть» без каких-либо гарантий.\n" +
+      "Автор: Kirill Fandeev (KVF SOFT)\n" +
+      "Поддержка: KVF_SOFT@mail.ru"
+    );
+    localStorage.setItem("ff_eula_accepted", "true");
+  }
+}
+
+function checkFirstRun() {
+  const completed = localStorage.getItem("ff_first_run");
+  if (!completed) {
+    setTimeout(() => {
+      alert("Добро пожаловать! 👋\n\nFinanceFugue — профессиональный менеджер клиентов и заказов.\n\n" +
+        "Быстрые клавиши:\n" +
+        "  Ctrl+N — новый клиент\n" +
+        "  Ctrl+F — поиск\n" +
+        "  Ctrl+O — файловый менеджер\n" +
+        "  Ctrl+S — сохранить\n" +
+        "  Ctrl+, — настройки\n" +
+        "  Escape — закрыть диалог\n\n" +
+        "Нажмите «➕ Новый клиент» чтобы начать работу.");
+      localStorage.setItem("ff_first_run", "true");
+    }, 500);
+  }
+}
+
+// === DRAG-DROP HANDLER ===
+
+let dragOverlay: HTMLDivElement | null = null;
+
+function showDragOverlay() {
+  if (!dragOverlay) {
+    dragOverlay = document.createElement("div");
+    dragOverlay.className = "drag-overlay";
+    dragOverlay.innerHTML = '<div class="drag-overlay-text">📁 Отпустите файлы для добавления в заказ</div>';
+    document.body.appendChild(dragOverlay);
+  }
+}
+
+function hideDragOverlay() {
+  if (dragOverlay) {
+    dragOverlay.remove();
+    dragOverlay = null;
+  }
+}
+
+async function handleFileDrop(paths: string[], x: number, y: number) {
+  console.log(`UI handleFileDrop: ${paths.length} file(s) at (${x},${y})`);
+  hideDragOverlay();
+  const el = document.elementFromPoint(x, y);
+  if (!el) { console.warn(`handleFileDrop: no element at drop point`); return; }
+  const card = (el as HTMLElement).closest(".order-card") as HTMLElement | null;
+  if (!card) { console.warn(`handleFileDrop: not dropped on order card`); return; }
+  const clientId = card.dataset.clientId;
+  const orderId = card.dataset.orderId;
+  if (!clientId || !orderId) { console.warn(`handleFileDrop: missing data attrs`); return; }
+  const client = clients.find(c => c.id === clientId);
+  const order = client?.orders.find(o => o.id === orderId);
+  if (!client || !order) { console.warn(`handleFileDrop: client/order not found`); return; }
+  const dbDir = await invoke<string>("get_db_dir");
+  console.log(`  → target: ${dbDir}`);
+  let added = 0;
+  for (const srcPath of paths) {
+    const targetDir = `${dbDir}/attached_files/${clientId}/${orderId}`;
+    try {
+      console.log(`IPC → copy_file_to: ${srcPath}`);
+      const newPath = await invoke<string>("copy_file_to", { source: srcPath, destDir: targetDir });
+      console.log(`IPC ← copy_file_to: ${newPath}`);
+      const name = srcPath.split(/[/\\]/).pop() || srcPath;
+      order.files.push({ path: newPath, name, is_finished: false, is_folder: false });
+      added++;
+    } catch (e) {
+      console.warn("Failed to copy dropped file:", srcPath, e);
+    }
+  }
+  if (added > 0) {
+    console.log(`  → ${added} files added via drag-drop`);
+    clients = await apiSaveClient(client);
+    renderClientProfile();
+    setStatus(`Добавлено ${added} файлов (drag-drop)`, "saved");
+  }
+}
+
+function setupDragDrop() {
+  console.log("UI setupDragDrop: registering onDragDropEvent");
+  getCurrentWindow().onDragDropEvent((event) => {
+    const p = event.payload;
+    console.log(`DnD event: type=${p.type}`);
+    switch (p.type) {
+      case "enter":
+        showDragOverlay();
+        break;
+      case "over":
+        break;
+      case "drop":
+        console.log(`DnD drop: ${p.paths.length} file(s) at (${p.position.x},${p.position.y})`);
+        handleFileDrop(p.paths, p.position.x, p.position.y);
+        break;
+      case "leave":
+        hideDragOverlay();
+        break;
+    }
+  }).catch((e) => {
+    console.error("DnD registration failed:", e);
+  });
 }
 
 async function openLink(url: string) {
@@ -1346,24 +2109,169 @@ async function openLink(url: string) {
 }
 (window as any).openLink = openLink;
 
+function parentDir(path: string): string {
+  const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  return idx >= 0 ? path.substring(0, idx) : path;
+}
+
+async function openFolder(path: string) {
+  const dir = parentDir(path);
+  console.log(`UI openFolder: file="${path}", dir="${dir}"`);
+  await apiOpenPath(dir);
+}
+(window as any).openFolder = openFolder;
+
+  async function onDeleteCurrentClient() {
+    console.log(`UI onDeleteCurrentClient`);
+    const client = getSelectedClient();
+    if (!client) { console.warn(`onDeleteCurrentClient: no client selected`); return; }
+    const ok = await showConfirm("Удалить клиента?", `Клиент "${client.name}" и все его заказы будут удалены.`);
+    if (!ok) { console.log(`  → cancelled`); return; }
+    clients = await apiDeleteClient(client.id);
+    if (selectedClientId === client.id) selectedClientId = clients.length > 0 ? clients[0].id : null;
+    renderDashboard();
+    renderClientList();
+    renderClientProfile();
+  }
+
 async function deleteFileFromOrder(clientId: string, orderId: string, fileName: string) {
+  console.log(`UI deleteFileFromOrder: clientId=${clientId}, orderId=${orderId}, file="${fileName}"`);
   const client = clients.find(c => c.id === clientId);
   const order = client?.orders.find(o => o.id === orderId);
-  if (!client || !order) return;
-  const ok = await showConfirm("Удалить файл?", `Удалить файл '${fileName}' из заказа?`);
-  if (!ok) return;
+  if (!client || !order) { console.warn(`deleteFileFromOrder: client/order not found`); return; }
+  const ok = await showConfirm("Удалить файл?", `Удалить файл '${fileName}' из заказа? Если файл существует на диске, он также будет удалён.`);
+  if (!ok) { console.log(`  → cancelled`); return; }
 
+  const file = order.files.find(f => f.name === fileName);
+  if (file && file.path) {
+    console.log(`IPC → delete_file: ${file.path}`);
+    try { await invoke("delete_file", { path: file.path });
+      console.log(`IPC ← delete_file: success`);
+    } catch (e) {
+      console.warn("deleteFileFromOrder: delete_file error:", file.path, e);
+    }
+  }
   order.files = order.files.filter(f => f.name !== fileName);
   clients = await apiSaveClient(client);
   renderClientProfile();
 }
+
+async function toggleFileFinished(clientId: string, orderId: string, fileName: string) {
+  console.log(`UI toggleFileFinished: clientId=${clientId}, orderId=${orderId}, file="${fileName}"`);
+  const client = clients.find(c => c.id === clientId);
+  const order = client?.orders.find(o => o.id === orderId);
+  const file = order?.files.find(f => f.name === fileName);
+  if (!file) { console.warn(`toggleFileFinished: file not found`); return; }
+  file.is_finished = !file.is_finished;
+  console.log(`  → ${fileName}: is_finished=${file.is_finished}`);
+  clients = await apiSaveClient(client!);
+  renderClientProfile();
+}
+
+async function renameFileInOrder(clientId: string, orderId: string, oldName: string) {
+  console.log(`UI renameFileInOrder: clientId=${clientId}, orderId=${orderId}, file="${oldName}"`);
+  const client = clients.find(c => c.id === clientId);
+  const order = client?.orders.find(o => o.id === orderId);
+  const file = order?.files.find(f => f.name === oldName);
+  if (!file) { console.warn(`renameFileInOrder: file not found`); return; }
+
+  const input = document.getElementById("rename-input") as HTMLInputElement;
+  input.value = oldName;
+  input.dataset.oldPath = file.path;
+  input.dataset.cid = clientId;
+  input.dataset.oid = orderId;
+  openModal("modal-rename");
+
+  const confirmBtn = document.getElementById("rename-confirm")!;
+  const modal = document.getElementById("modal-rename") as HTMLDialogElement;
+
+  const handler = async () => {
+    const newName = input.value.trim();
+    if (!newName) { console.warn(`rename: empty name`); alert("Введите новое имя"); return; }
+    console.log(`  → renaming "${oldName}" -> "${newName}"`);
+    const x = clients.find(c => c.id === clientId);
+    const o = x?.orders.find(o => o.id === orderId);
+    const f = o?.files.find(f => f.name === oldName);
+    if (f) {
+      try {
+        console.log(`IPC → rename_file: oldPath=${f.path}, newName=${newName}`);
+        const newPath = await invoke<string>("rename_file", { oldPath: f.path, newName });
+        console.log(`IPC ← rename_file: ${newPath}`);
+        f.path = newPath;
+        f.name = newName;
+        clients = await apiSaveClient(x!);
+        renderFileManager();
+        renderClientProfile();
+        setStatus("Файл переименован", "saved");
+      } catch (e) {
+        console.error(`renameFileInOrder error:`, e);
+        alert(`Ошибка переименования: ${e}`);
+      }
+    }
+    closeModal("modal-rename");
+    cleanup();
+  };
+
+  const cleanup = () => {
+    confirmBtn.removeEventListener("click", handler);
+    modal.removeEventListener("close", cleanup);
+  };
+
+  confirmBtn.addEventListener("click", handler);
+  modal.addEventListener("close", cleanup);
+}
 (window as any).deleteFileFromOrder = deleteFileFromOrder;
+(window as any).toggleFileFinished = toggleFileFinished;
+(window as any).renameFileInOrder = renameFileInOrder;
 
 // =====================================================
 // INITIALIZATION
 // =====================================================
 
 async function init() {
+  console.log("=== FinanceFugue Initialization Start ===");
+  try {
+    const isLocked = await invoke<boolean>("has_password");
+    if (isLocked) {
+      el("lock-screen")!.style.display = "flex";
+      
+      const pwdInput = el("lock-password-input") as HTMLInputElement;
+      const unlockBtn = el("btn-unlock");
+      const errBox = el("lock-error")!;
+      
+      const tryUnlock = async () => {
+        const pwd = pwdInput.value;
+        if (!pwd) return;
+        const valid = await invoke<boolean>("check_password", { password: pwd });
+        if (valid) {
+          el("lock-screen")!.style.display = "none";
+          el("main-app")!.style.display = "block";
+          continueInit();
+        } else {
+          errBox.textContent = "Неверный пароль";
+          pwdInput.value = "";
+          pwdInput.focus();
+        }
+      };
+      
+      unlockBtn?.addEventListener("click", tryUnlock);
+      pwdInput?.addEventListener("keyup", (e) => {
+        if (e.key === "Enter") tryUnlock();
+      });
+      pwdInput.focus();
+      return; // Stop initialization until unlocked
+    } else {
+      el("main-app")!.style.display = "block";
+    }
+  } catch (e) {
+    console.error("Failed to check password:", e);
+    el("main-app")!.style.display = "block";
+  }
+
+  continueInit();
+}
+
+async function continueInit() {
   try {
     clients = await apiGetClients();
   } catch (e) {
@@ -1371,9 +2279,10 @@ async function init() {
     clients = [];
   }
 
-  // Auto select first client if available
+  console.log(`init: loaded ${clients.length} clients`);
   if (clients.length > 0 && !selectedClientId) {
     selectedClientId = clients[0].id;
+    console.log(`init: auto-selected client id=${selectedClientId}`);
   }
 
   renderDashboard();
@@ -1382,13 +2291,22 @@ async function init() {
   setupFormListeners();
   setupContextMenu();
   setupKeyboardShortcuts();
+  setupDragDrop();
+  checkEula();
+  checkFirstRun();
 
   el("btn-add-client")!.addEventListener("click", openAddClientModal);
+  el("btn-file-manager")!.addEventListener("click", openFileManager);
   el("btn-settings")!.addEventListener("click", openSettingsModal);
+  el("btn-help")!.addEventListener("click", openHelp);
+  el("btn-about")!.addEventListener("click", openAbout);
   el("search-input")!.addEventListener("input", () => renderClientList());
+
+  updateDbSizeDisplay();
 
   (el("sort-select") as HTMLSelectElement).addEventListener("change", (e) => {
     sortMode = (e.target as HTMLSelectElement).value;
+    console.log(`UI sort-select: mode=${sortMode}`);
     renderClientList();
   });
 
@@ -1396,7 +2314,199 @@ async function init() {
     if (appSettings.deadline_notifications) checkDeadlineNotifications();
   }, 1000);
 
+  console.log("=== FinanceFugue Initialization Complete ===");
   setStatus("FinanceFugue готов к работе", "saved", 3000);
 }
 
-window.addEventListener("DOMContentLoaded", init);
+function initSettingsWindow() {
+  console.log("=== Settings Window Init ===");
+  el("main-app")!.style.display = "none";
+  el("settings-page")!.style.display = "block";
+
+  const closeBtn = el("settings-close-btn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      getCurrentWindow().close().catch(e => console.error("close error:", e));
+    });
+  }
+
+  invoke<string>("get_db_dir").then(dir => {
+    (el("set-db-path") as HTMLInputElement).value = dir;
+  }).catch(e => console.error("Failed to get DB dir:", e));
+
+  invoke<Client[]>("get_clients").then(c => {
+    clients = c;
+    console.log(`settings: loaded ${clients.length} clients`);
+  }).catch(e => console.error("Failed to load clients:", e));
+
+  el("set-deadline-notify")!.addEventListener("change", (e) => {
+    appSettings.deadline_notifications = (e.target as HTMLInputElement).checked;
+    saveSettings(appSettings);
+  });
+
+  // Password management
+  el("set-change-password")?.addEventListener("click", async () => {
+    const hasPwd = await invoke<boolean>("has_password");
+    if (hasPwd) {
+      const oldPwd = prompt("Введите текущий пароль:");
+      if (!oldPwd) return;
+      const valid = await invoke<boolean>("check_password", { password: oldPwd });
+      if (!valid) {
+        alert("Неверный пароль.");
+        return;
+      }
+    }
+    const newPwd = prompt("Введите новый пароль:");
+    if (newPwd) {
+      await invoke("set_password", { password: newPwd });
+      alert("Пароль успешно установлен.");
+    }
+  });
+
+  el("set-remove-password")?.addEventListener("click", async () => {
+    const hasPwd = await invoke<boolean>("has_password");
+    if (!hasPwd) {
+      alert("Пароль не установлен.");
+      return;
+    }
+    const oldPwd = prompt("Введите текущий пароль для отключения защиты:");
+    if (!oldPwd) return;
+    const valid = await invoke<boolean>("check_password", { password: oldPwd });
+    if (!valid) {
+      alert("Неверный пароль.");
+      return;
+    }
+    await invoke("set_password", { password: null });
+    alert("Защита паролем отключена.");
+  });
+
+
+  el("set-browse-db")!.addEventListener("click", async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "Выберите папку для хранения БД" });
+      if (selected) {
+        await invoke("save_db_dir", { dir: selected });
+        (el("set-db-path") as HTMLInputElement).value = selected;
+        setStatus("Путь к БД сохранён. Перезапустите программу.", "saved");
+      }
+    } catch (e) {
+      console.error("set-browse-db error:", e);
+    }
+  });
+
+  el("set-export-json")!.addEventListener("click", () => {
+    const json = JSON.stringify(clients, null, 2);
+    downloadFile("financefugue_export.json", json, "application/json");
+  });
+
+  el("set-backup-zip")!.addEventListener("click", async () => {
+    const filePaths: string[] = [];
+    for (const c of clients) {
+      for (const o of c.orders) {
+        for (const f of o.files) {
+          if (f.path && !filePaths.includes(f.path)) filePaths.push(f.path);
+        }
+      }
+    }
+    const dbJson = JSON.stringify(clients, null, 2);
+    try {
+      const zipData = await invoke<number[]>("create_backup_zip", { filePaths, dbJson });
+      await downloadBlob(`financefugue_backup_${Date.now()}.zip`, zipData, "application/zip");
+      setStatus("Бэкап ZIP создан", "saved");
+    } catch (e) {
+      console.error(`exportFullBackup error:`, e);
+      setStatus(`Ошибка бэкапа: ${e}`, "error");
+    }
+  });
+
+  el("set-import-folder")!.addEventListener("click", () => {
+    importFromFolder();
+  });
+
+  el("set-delete-files")!.addEventListener("click", async () => {
+    const choice = await showConfirm("Удалить все файлы", "Файлы будут удалены с диска. Продолжить?");
+    if (!choice) return;
+    let deletedCount = 0;
+    let failedCount = 0;
+    for (const c of clients) {
+      for (const o of c.orders) {
+        const remainingFiles: ProjectFile[] = [];
+        for (const f of o.files) {
+          try {
+            await invoke("delete_file", { path: f.path });
+            deletedCount++;
+          } catch (err) {
+            console.warn(`Failed to delete file ${f.path}:`, err);
+            failedCount++;
+            remainingFiles.push(f);
+          }
+        }
+        o.files = remainingFiles;
+      }
+    }
+    for (const c of clients) {
+      clients = await apiSaveClient(c);
+    }
+    renderClientProfile();
+    if (failedCount > 0) {
+      setStatus(`Удалено ${deletedCount} файлов, ошибок: ${failedCount}`, "error");
+    } else {
+      setStatus(`Удалено файлов: ${deletedCount}`, "saved");
+    }
+  });
+
+  el("set-delete-db")!.addEventListener("click", async () => {
+    const ok = await showConfirm("Очистить базу данных", "Все данные будут безвозвратно удалены! Продолжить?");
+    if (!ok) return;
+    try {
+      await invoke("delete_database");
+      clients = [];
+      selectedClientId = null;
+      renderDashboard();
+      renderClientList();
+      renderClientProfile();
+      setStatus("База данных очищена", "saved");
+    } catch (e) {
+      console.error("delete_database error:", e);
+      setStatus(`Ошибка очистки БД: ${e}`, "error");
+    }
+  });
+
+  el("set-import-json")!.addEventListener("click", async () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const imported: Client[] = JSON.parse(text);
+        if (!Array.isArray(imported)) throw new Error("Неверный формат файла");
+        const ok = await showConfirm("Импорт данных", `Будет загружено ${imported.length} клиентов. Продолжить?`);
+        if (!ok) return;
+        for (const client of imported) {
+          clients = await apiSaveClient(client);
+        }
+        setStatus(`Импортировано ${imported.length} клиентов`, "saved");
+      } catch (err) {
+        console.error(`import-json error:`, err);
+        alert(`Ошибка импорта: ${err}`);
+      }
+    });
+    input.click();
+  });
+
+  updateDbSizeDisplay();
+  console.log("=== Settings Window Ready ===");
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  const currentWindow = getCurrentWindow();
+  const isSettingsWindow = currentWindow.label === "settings";
+  if (isSettingsWindow) {
+    initSettingsWindow();
+  } else {
+    init();
+  }
+});

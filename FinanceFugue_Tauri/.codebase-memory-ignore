@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.exe
+*.dll
+*.lock
+package-lock.json
+Cargo.lock
+pro_database.json
+pro_database.lock

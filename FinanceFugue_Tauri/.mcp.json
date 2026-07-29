@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "financefugue-mcp": {
+      "command": "python",
+      "args": [
+        "E:/coding/client_manager/FinanceFugue_Tauri/financefugue_mcp.py"
+      ]
+    }
+  }
+}

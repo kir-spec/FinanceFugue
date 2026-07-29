@@ -1,0 +1,17 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/icons/
+*.exe
+*.dll
+*.lock
+*.png
+*.ico
+*.icns
+package-lock.json
+Cargo.lock
+pro_database.json
+pro_database.lock
+BUGFIX_TZ.md
+TAURI_MIGRATION_SPEC.md

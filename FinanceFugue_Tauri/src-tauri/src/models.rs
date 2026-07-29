@@ -59,45 +59,6 @@ fn default_status() -> String {
     "В работе".to_string()
 }
 
-#[allow(dead_code)]
-impl Order {
-    pub fn total_received(&self) -> f64 {
-        self.payments.iter().map(|p| p.amount).sum()
-    }
-
-    pub fn total_advance_received(&self) -> f64 {
-        self.payments
-            .iter()
-            .filter(|p| p.r#type == "аванс")
-            .map(|p| p.amount)
-            .sum()
-    }
-
-    pub fn total_payments_received(&self) -> f64 {
-        self.payments
-            .iter()
-            .filter(|p| p.r#type == "платеж")
-            .map(|p| p.amount)
-            .sum()
-    }
-
-    pub fn total_corrections_received(&self) -> f64 {
-        self.payments
-            .iter()
-            .filter(|p| p.r#type == "корректировка")
-            .map(|p| p.amount)
-            .sum()
-    }
-
-    pub fn debt(&self) -> f64 {
-        (self.price - self.total_received()).max(0.0)
-    }
-
-    pub fn remaining_debt(&self) -> f64 {
-        (self.price - self.advance - self.total_payments_received() - self.total_corrections_received()).max(0.0)
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Client {
     pub id: String,
@@ -112,12 +73,4 @@ pub struct Client {
     pub orders: Vec<Order>,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DashboardStats {
-    pub total_clients: usize,
-    pub total_orders: usize,
-    pub active_orders: usize,
-    pub total_revenue: f64,
-    pub total_debt: f64,
-}
+

@@ -23,6 +23,7 @@ fn main() {
     });
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             get_clients,
@@ -30,8 +31,23 @@ fn main() {
             delete_client,
             delete_order,
             delete_payment,
-            add_payment,
-            open_path
+            open_path,
+            create_backup_zip,
+            export_files_zip,
+            get_database_size,
+            delete_database,
+            rename_file,
+            delete_file,
+            copy_file_to,
+            get_db_dir,
+            save_db_dir,
+            get_saved_db_dir,
+            open_settings_window,
+            read_text_file,
+            save_file_bytes,
+            has_password,
+            check_password,
+            set_password,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

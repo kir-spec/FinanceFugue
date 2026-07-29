@@ -10,75 +10,160 @@
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
-  <div id="app" class="app-layout">
+  <!-- ==================== ЭКРАН БЛОКИРОВКИ ==================== -->
+  <div id="lock-screen" class="lock-screen" style="display:none">
+    <div class="lock-content">
+      <div class="lock-icon">🔒</div>
+      <h2>Вход в систему</h2>
+      <p>FinanceFugue Pro заблокирован</p>
+      <div class="form-group">
+        <input type="password" id="lock-password-input" placeholder="Введите пароль..." />
+      </div>
+      <button class="btn btn-primary" id="btn-unlock" style="width:100%">Разблокировать</button>
+      <div id="lock-error" class="lock-error"></div>
+    </div>
+  </div>
 
-    <!-- ==================== САЙДБАР ==================== -->
-    <aside class="sidebar">
-      <div class="brand">
-        <span class="brand-icon">💼</span>
-        <div class="brand-text">
-          <h1>FinanceFugue</h1>
-          <span class="badge-version">Tauri Edition</span>
+  <div id="main-app" style="display:none">
+    <div id="app" class="app-layout">
+
+      <!-- ==================== САЙДБАР ==================== -->
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-icon">💼</span>
+          <div class="brand-text">
+            <h1>FinanceFugue</h1>
+            <span class="badge-version">Tauri Edition</span>
+          </div>
         </div>
+
+        <div class="search-wrap">
+          <input type="text" id="search-input" placeholder="🔍 Поиск клиентов..." autocomplete="off" />
+        </div>
+
+        <select id="sort-select" class="sort-select">
+          <option value="alpha-asc">Имя (А-Я)</option>
+          <option value="alpha-desc">Имя (Я-А)</option>
+          <option value="order-new">Новые заказы</option>
+          <option value="order-old">Старые заказы</option>
+          <option value="urgent">Срочные</option>
+        </select>
+
+        <div id="client-list" class="client-list"></div>
+
+        <div class="sidebar-footer">
+          <button id="btn-add-client" class="btn-sidebar-primary" title="Ctrl+N">➕ Новый клиент</button>
+          <button id="btn-file-manager" class="btn-sidebar" title="Ctrl+O">📁 Файловый менеджер</button>
+          <button id="btn-settings" class="btn-sidebar" title="Ctrl+,">⚙ Настройки</button>
+          <div class="sidebar-footer-row">
+            <button id="btn-help" class="btn-sidebar-sm" title="Помощь (F1)">❓</button>
+            <button id="btn-about" class="btn-sidebar-sm" title="О программе">ℹ️</button>
+            <div id="db-info" class="db-info">Клиентов: 0</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ==================== ГЛАВНЫЙ КОНТЕНТ ==================== -->
+      <main class="main-content">
+
+        <!-- Дашборд -->
+        <div class="dashboard-bar">
+          <div class="dash-stat" style="--accent-c:#00D1FF">
+            <span class="dash-label">📋 В РАБОТЕ</span>
+            <span class="dash-value" id="dash-active" style="color:#00D1FF">0</span>
+          </div>
+          <div class="dash-stat" style="--accent-c:#28A745">
+            <span class="dash-label">✅ ВЫПОЛНЕНО</span>
+            <span class="dash-value" id="dash-done" style="color:#28A745">0</span>
+          </div>
+          <div class="dash-stat" style="--accent-c:#FFD700">
+            <span class="dash-label">💰 АВАНСЫ</span>
+            <span class="dash-value" id="dash-advance" style="color:#FFD700">0 ₽</span>
+          </div>
+          <div class="dash-stat" style="--accent-c:#FF4B2B">
+            <span class="dash-label">💳 ДОЛГИ</span>
+            <span class="dash-value" id="dash-debt">0 ₽</span>
+          </div>
+          <div class="dash-stat" style="--accent-c:#28A745">
+            <span class="dash-label">💵 КАССА</span>
+            <span class="dash-value" id="dash-cash" style="color:#28A745">0 ₽</span>
+          </div>
+        </div>
+
+        <!-- Профиль клиента -->
+        <div id="client-detail" class="client-detail">
+          <div class="empty-state">
+            <div class="empty-state-icon">👈</div>
+            <div>Выберите клиента из списка слева<br>или создайте нового (Ctrl+N)</div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ==================== СТРАНИЦА НАСТРОЕК (отдельное окно) ==================== -->
+  <div id="settings-page" style="display:none">
+    <div class="settings-window">
+      <div class="settings-window-header">
+        <h3>⚙ Настройки</h3>
+        <button class="modal-close" id="settings-close-btn">✕</button>
       </div>
 
-      <div class="search-wrap">
-        <input type="text" id="search-input" placeholder="🔍 Поиск клиентов..." autocomplete="off" />
-      </div>
-
-      <select id="sort-select" class="sort-select">
-        <option value="alpha-asc">Имя (А-Я)</option>
-        <option value="alpha-desc">Имя (Я-А)</option>
-        <option value="order-new">Новые заказы</option>
-        <option value="order-old">Старые заказы</option>
-        <option value="urgent">Срочные</option>
-      </select>
-
-      <div id="client-list" class="client-list"></div>
-
-      <div class="sidebar-footer">
-        <button id="btn-add-client" class="btn-sidebar-primary" title="Ctrl+N">➕ Новый клиент</button>
-        <button id="btn-settings" class="btn-sidebar" title="Ctrl+,">⚙ Настройки</button>
-        <div id="db-info" class="db-info">Клиентов: 0</div>
-      </div>
-    </aside>
-
-    <!-- ==================== ГЛАВНЫЙ КОНТЕНТ ==================== -->
-    <main class="main-content">
-
-      <!-- Дашборд -->
-      <div class="dashboard-bar">
-        <div class="dash-stat" style="--accent-c:#00D1FF">
-          <span class="dash-label">📋 В РАБОТЕ</span>
-          <span class="dash-value" id="dash-active" style="color:#00D1FF">0</span>
+      <div class="settings-window-body">
+        <div class="settings-section">
+          <div class="settings-section-title">База данных</div>
+          <div class="settings-btns-col">
+            <div class="form-group">
+              <label>Директория хранения БД</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input type="text" id="set-db-path" class="form-input" readonly style="flex:1;font-size:11px" />
+                <button class="btn btn-secondary" id="set-browse-db" style="white-space:nowrap">📂 Обзор</button>
+              </div>
+              <span style="font-size:10px;color:var(--color-text-dim);margin-top:2px;display:block">Для применения нового пути перезапустите программу</span>
+            </div>
+            <button class="btn btn-secondary" id="set-export-json">📤 Экспорт данных (JSON)</button>
+            <button class="btn btn-secondary" id="set-import-json">📥 Импорт данных (JSON)</button>
+            <button class="btn btn-secondary" id="set-backup-zip">💾 Полный бэкап (ZIP)</button>
+            <button class="btn btn-secondary" id="set-import-folder">📂 Импорт из папки</button>
+            <button class="btn btn-secondary" id="set-db-size" disabled>Размер БД: —</button>
+          </div>
         </div>
-        <div class="dash-stat" style="--accent-c:#28A745">
-          <span class="dash-label">✅ ВЫПОЛНЕНО</span>
-          <span class="dash-value" id="dash-done" style="color:#28A745">0</span>
-        </div>
-        <div class="dash-stat" style="--accent-c:#FFD700">
-          <span class="dash-label">💰 АВАНСЫ</span>
-          <span class="dash-value" id="dash-advance" style="color:#FFD700">0 ₽</span>
-        </div>
-        <div class="dash-stat" style="--accent-c:#FF4B2B">
-          <span class="dash-label">💳 ДОЛГИ</span>
-          <span class="dash-value" id="dash-debt">0 ₽</span>
-        </div>
-        <div class="dash-stat" style="--accent-c:#28A745">
-          <span class="dash-label">💵 КАССА</span>
-          <span class="dash-value" id="dash-cash" style="color:#28A745">0 ₽</span>
-        </div>
-      </div>
 
-      <!-- Профиль клиента -->
-      <div id="client-detail" class="client-detail">
-        <div class="empty-state">
-          <div class="empty-state-icon">👈</div>
-          <div>Выберите клиента из списка слева<br>или создайте нового (Ctrl+N)</div>
+        <div class="settings-section">
+          <div class="settings-section-title">Управление данными</div>
+          <div class="settings-btns-col">
+            <button class="btn btn-secondary" id="set-delete-files">🗑 Удалить все файлы</button>
+            <button class="btn btn-danger" id="set-delete-db">⚠️ Очистить всю базу данных</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Безопасность</div>
+          <div class="settings-btns-col">
+            <button class="btn btn-secondary" id="set-change-password">🔑 Установить / Изменить пароль</button>
+            <button class="btn btn-danger" id="set-remove-password">🔓 Снять пароль</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Приложение</div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="set-deadline-notify" />
+            <span>Уведомления о приближающихся дедлайнах</span>
+          </label>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">О программе</div>
+          <div class="about-block">
+            <strong>FinanceFugue</strong> — Tauri Edition<br>
+            <span class="text-muted">Профессиональный менеджер клиентов и заказов</span><br>
+            <span class="text-muted" style="font-size:11px;">v29.07.2026 · Rust + TypeScript · kir-spec</span>
+          </div>
         </div>
       </div>
-
-    </main>
+    </div>
   </div>
 
   <!-- ==================== КОНТЕКСТНОЕ МЕНЮ ==================== -->
@@ -152,6 +237,7 @@
         <div class="settings-section-title">Инструменты экспорта</div>
         <div class="settings-btns-row">
           <button class="btn btn-secondary" id="cs-export-json" type="button">📊 Экспорт заказов (JSON)</button>
+          <button class="btn btn-secondary" id="cs-export-files-zip" type="button">📦 Экспорт файлов (ZIP)</button>
         </div>
       </div>
       <div class="modal-actions" style="justify-content:space-between;">
@@ -281,45 +367,6 @@
     </div>
   </dialog>
 
-  <!-- Настройки приложения -->
-  <dialog id="modal-settings" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>⚙ Настройки</h3>
-        <button class="modal-close" onclick="document.getElementById('modal-settings').close()">✕</button>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-section-title">База данных</div>
-        <div class="settings-btns-col">
-          <button class="btn btn-secondary" id="set-export-json">📤 Экспорт данных (JSON)</button>
-          <button class="btn btn-secondary" id="set-import-json">📥 Импорт данных (JSON)</button>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-section-title">Приложение</div>
-        <label class="checkbox-label">
-          <input type="checkbox" id="set-deadline-notify" />
-          <span>Уведомления о приближающихся дедлайнах</span>
-        </label>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-section-title">О программе</div>
-        <div class="about-block">
-          <strong>FinanceFugue</strong> — Tauri Edition<br>
-          <span class="text-muted">Профессиональный менеджер клиентов и заказов</span><br>
-          <span class="text-muted" style="font-size:11px;">v25.7.2026 · Rust + TypeScript · kir-spec</span>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" onclick="document.getElementById('modal-settings').close()">Закрыть</button>
-      </div>
-    </div>
-  </dialog>
-
   <!-- Диалог подтверждения -->
   <dialog id="modal-confirm" class="modal modal-sm">
     <div class="modal-content">
@@ -336,6 +383,62 @@
 
   <!-- Статус бар -->
   <div id="status-bar" class="status-bar">Готово</div>
+
+  <!-- ==================== ФАЙЛОВЫЙ МЕНЕДЖЕР ==================== -->
+  <dialog id="modal-file-manager" class="modal modal-wide">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📁 Файловый менеджер</h3>
+        <button class="modal-close" onclick="document.getElementById('modal-file-manager').close()">✕</button>
+      </div>
+      <div id="fm-tree" class="fm-tree"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('modal-file-manager').close()">Закрыть</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ==================== ПЕРЕИМЕНОВАТЬ ФАЙЛ ==================== -->
+  <dialog id="modal-rename" class="modal modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>✏️ Переименовать файл</h3>
+      </div>
+      <div class="form-group">
+        <label>Новое имя:</label>
+        <input type="text" id="rename-input" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('modal-rename').close()">Отмена</button>
+        <button type="button" class="btn btn-primary" id="rename-confirm">✅ Переименовать</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ==================== О ПРОГРАММЕ ==================== -->
+  <dialog id="modal-about" class="modal modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>ℹ️ О программе</h3>
+        <button class="modal-close" onclick="document.getElementById('modal-about').close()">✕</button>
+      </div>
+      <div class="about-dialog" id="about-dialog-content">
+        <div class="about-logo">💼 FinanceFugue</div>
+        <div class="about-version">Версия 29.07.2026</div>
+        <div class="about-desc">Профессиональный менеджер клиентов и заказов для фрилансеров</div>
+        <div class="about-line">Разработчик: Kirill Fandeev (KVF SOFT)</div>
+        <div class="about-line">Поддержка: KVF_SOFT@mail.ru</div>
+        <div class="about-line">Технологии: Tauri 2.0 · Rust · TypeScript</div>
+        <div class="about-line">Лицензия: MIT</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('modal-about').close()">Закрыть</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ==================== ИМПОРТ ИЗ ПАПКИ ==================== -->
+  <input type="file" id="folder-importer" style="display:none" webkitdirectory />
 
   <script type="module" src="/src/main.ts"></script>
 </body>

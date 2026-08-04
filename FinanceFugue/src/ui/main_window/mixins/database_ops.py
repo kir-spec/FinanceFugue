@@ -129,10 +129,40 @@ class DatabaseOpsMixin:
         )
         if path:
             try:
-                export_database(Path(path), self.clients)
-                QMessageBox.information(self, "Успех", f"База данных экспортирована в:\n{path}")
+                storage_mode = (
+                    (self.app_settings or {}).get("file_storage_mode", "copy")
+                )
+                # Для 'copy' режима — спрашиваем, копировать ли файлы.
+                include_files = False
+                if storage_mode == "copy":
+                    answer = QMessageBox.question(
+                        self,
+                        "Экспорт с файлами",
+                        "Включить файлы клиентов в экспорт?\n"
+                        "Файлы будут скопированы в папку 'files/' рядом с JSON.\n"
+                        "(Если нет — импортёр увидит только метаданные.)",
+                        QMessageBox.StandardButton.Yes
+                        | QMessageBox.StandardButton.No,
+                    )
+                    include_files = answer == QMessageBox.StandardButton.Yes
+
+                export_database(
+                    Path(path),
+                    self.clients,
+                    file_storage_mode=storage_mode,
+                    include_files=include_files,
+                )
+                msg = f"База данных экспортирована в:\n{path}\n"
+                if include_files:
+                    msg += (
+                        f"\nФайлы скопированы в: {Path(path).parent / 'files'}"
+                    )
+                QMessageBox.information(self, "Успех", msg)
             except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось экспортировать базу данных:\n{e}")
+                QMessageBox.critical(
+                    self, "Ошибка",
+                    f"Не удалось экспортировать базу данных:\n{e}",
+                )
 
     def import_json_file(self):
         path, _ = QFileDialog.getOpenFileName(

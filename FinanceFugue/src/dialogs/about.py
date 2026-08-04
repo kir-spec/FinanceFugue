@@ -57,12 +57,33 @@ class AboutDialog(QDialog):
             f"<p>CRM для учёта клиентов, заказов, платежей и файлов.<br>"
             f"Данные хранятся локально на вашем компьютере.</p>"
             f"<p>Контакт: <a href='mailto:{SUPPORT_EMAIL}' style='color:#00D1FF'>{SUPPORT_EMAIL}</a></p>"
-            f"<p>Документы: EULA, политика конфиденциальности, лицензии PySide6 (LGPL v3).</p>"
+            f"<p>Документы: EULA, политика конфиденциальности, "
+            f"<a href='#license-tab' style='color:#00D1FF'>лицензии сторонних компонентов</a>.</p>"
         )
         info.setWordWrap(True)
         info.setOpenExternalLinks(True)
         info.setTextFormat(Qt.TextFormat.RichText)
         v.addWidget(info)
+
+        # LGPL notice per Qt licensing requirements.
+        lgpl = QLabel(
+            "<p style='color:#888;font-size:11px;margin-top:10px'>"
+            "<b>LGPL v3 notice:</b> This software uses PySide6 (Qt for Python), "
+            "licensed under <i>GNU Lesser General Public License v3</i>.<br>"
+            "Per LGPL §6, you may <b>relink</b> this application against a "
+            "modified version of PySide6 / Qt libraries.<br>"
+            "Source code for this application and PySide6 is available at "
+            "<a href='https://github.com/your-repo/financefugue' "
+            "style='color:#00D1FF'>github.com</a> and "
+            "<a href='https://doc.qt.io/qtforpython-6/' "
+            "style='color:#00D1FF'>doc.qt.io</a>."
+            "</p>"
+        )
+        lgpl.setWordWrap(True)
+        lgpl.setOpenExternalLinks(True)
+        lgpl.setTextFormat(Qt.TextFormat.RichText)
+        v.addWidget(lgpl)
+
         v.addStretch()
         return widget
 

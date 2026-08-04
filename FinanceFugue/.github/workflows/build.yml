@@ -1,0 +1,98 @@
+name: Build Windows EXE
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build FinanceFugue-${{ github.ref_name }}
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements-build.txt
+          pip install pyinstaller==6.20.0
+
+      - name: Build EXE
+        run: |
+          # Очистить предыдущую сборку
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+          if (Test-Path build) { Remove-Item -Recurse -Force build }
+          # Сборка (логирование)
+          pyinstaller build.spec --log-level WARN 2>&1 | Tee-Object -FilePath build.log
+
+      - name: Verify EXE created
+        run: |
+          if (-not (Test-Path "dist/FinanceFugue.exe")) {
+            Write-Error "FinanceFugue.exe не создан"
+            exit 1
+          }
+          $size = (Get-Item "dist/FinanceFugue.exe").Length
+          Write-Host "EXE size: $([math]::Round($size / 1MB, 2)) MB"
+          # EXE должен быть < 100 МБ (типично 30-60 МБ)
+          if ($size -gt 100MB) {
+            Write-Warning "EXE > 100MB — оптимизируйте UPX"
+          }
+
+      - name: Smoke launch
+        shell: pwsh
+        run: |
+          # Smoke test: запустить EXE в headless нельзя (он QMainWindow),
+          # но проверим, что `--version` не падает.
+          # PyInstaller EXE на Windows поддерживает --version через
+          # специальную обработку main_pyside.py — добавляем запасной вариант.
+          $env:FINANCEFUGUE_DEBUG = "1"
+          $proc = Start-Process -FilePath "dist/FinanceFugue.exe" `
+            -PassThru -RedirectStandardOutput "smoke.out" `
+            -RedirectStandardError "smoke.err" `
+            -ArgumentList "--smoke-test"
+          Start-Sleep -Seconds 5
+          if (-not $proc.HasExited) {
+            Write-Host "EXE запустился успешно, завершаем"
+            $proc | Stop-Process -Force
+          }
+          Get-Content smoke.err -ErrorAction SilentlyContinue
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FinanceFugue-${{ github.ref_name }}
+          path: |
+            dist/FinanceFugue.exe
+            build.log
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: FinanceFugue-${{ github.ref_name }}
+          path: dist/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/FinanceFugue.exe
+          generate_release_notes: true

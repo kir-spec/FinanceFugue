@@ -21,13 +21,18 @@ logger = get_logger("Widgets")
 
 class OrderFinancialMixin:
     def format_number(self, num):
-        """Форматирует число без лишних нулей"""
+        """Форматирует число без лишних нулей, но сохраняя введённые копейки.
+
+        Раньше ``0.5`` отображалось как ``0`` (терялось значение),
+        а ``1.5`` — как ``2`` (округление ``int``).
+        """
         try:
-            if num != num or num in (float('inf'), float('-inf')):  # nan / inf
+            if num != num or num in (float('inf'), float('-inf')):
                 return "0"
-            if num == int(num):
-                return str(int(num))
-            return str(round(num, 2)).rstrip('0').rstrip('.')
+            text = f"{num:.2f}"
+            if "." in text:
+                text = text.rstrip('0').rstrip('.')
+            return text or "0"
         except (OverflowError, ValueError):
             return "0"
 
@@ -88,12 +93,13 @@ class OrderFinancialMixin:
                 msg_box.exec()
                 
                 if msg_box.clickedButton() == btn_yes:
-                    # Уменьшаем аванс до новой цены
+                    # Сначала меняем цену, затем добавляем возврат,
+                    # чтобы add_payment не откатил self.order.advance обратно
+                    # через max(advance, total_advance_received).
+                    self.order.price = new_price
+                    self.order.add_payment(-diff, "аванс", "Возврат части аванса из-за уменьшения стоимости")
                     self.order.advance = new_price
                     self.advance_edit.setText(self.format_number(new_price))
-                    # Добавляем возврат аванса
-                    self.order.add_payment(-diff, "аванс", "Возврат части аванса из-за уменьшения стоимости")
-                    self.order.price = new_price
                 else:
                     self.cost_edit.setText(self.format_number(self.order.price))
                     return

@@ -84,7 +84,9 @@ class FileItemWidget(QWidget):
                 QMessageBox.critical(self, "Ошибка", f"Не удалось переименовать файл: {e}")
 
     def mouseReleaseEvent(self, event):
-        self.open_file()
+        """Игнорируем клики по дочерним кнопкам, чтобы не дублировать открытие."""
+        if self.childAt(event.position().toPoint()) is None:
+            self.open_file()
         super().mouseReleaseEvent(event)
 
     def open_file(self):

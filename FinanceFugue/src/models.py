@@ -90,17 +90,29 @@ class Order:
             return None
 
     def add_payment(self, amount: float, payment_type: str = "платеж", note: str = "", date: str = None):
-        """Добавить платеж"""
+        """Добавить платеж.
+
+        Валидация:
+        * 0 запрещён;
+        * положительный платёж не должен превышать остаток долга;
+        * отрицательный платёж (возврат) не должен превышать полученную сумму.
+          Раньше при переплате ``debt == 0`` и любой положительный платёж
+          проходил проверку — теперь это тоже блокируется.
+        """
         if amount == 0:
             raise ValueError("Сумма платежа не может быть нулевой")
-        
-        # Проверяем, что платеж не превышает задолженность
+
         if amount > 0:
             if amount > self.debt:
-                raise ValueError(f"Сумма платежа ({amount}) превышает остаток долга ({self.debt})")
+                raise ValueError(
+                    f"Сумма платежа ({amount}) превышает остаток долга ({self.debt})"
+                )
         else:
             if abs(amount) > self.total_received:
-                raise ValueError(f"Сумма возврата ({abs(amount)}) превышает полученную сумму ({self.total_received})")
+                raise ValueError(
+                    f"Сумма возврата ({abs(amount)}) превышает полученную сумму "
+                    f"({self.total_received})"
+                )
         
         if date is None:
             date = datetime.now().strftime("%d.%m.%Y %H:%M")
@@ -140,20 +152,27 @@ class Order:
                 self.add_payment(diff, "аванс", "Уменьшение аванса")
 
     def update_price(self, new_price: float):
-        """Обновить стоимость заказа с проверками"""
+        """Обновить стоимость заказа с проверками.
+
+        При уменьшении цены ниже аванса сначала уменьшаем ``total_received``
+        через возврат аванса (negative payment), затем меняем ``advance``
+        и ``price``. Раньше порядок был обратный, и ``add_payment`` откатывал
+        ``self.advance`` через ``max(self.advance, total_advance_received)``.
+        """
         if new_price < 0:
             raise ValueError("Стоимость не может быть отрицательной")
-        
-        if new_price < self.total_received:
-            raise ValueError(f"Новая стоимость ({new_price}) не может быть меньше уже полученной суммы ({self.total_received})")
-        
+
         if new_price < self.advance:
-            # Новая стоимость меньше аванса - предлагаем вернуть разницу
             diff = self.advance - new_price
-            self.advance = new_price
-            # Добавляем возврат аванса
             self.add_payment(-diff, "аванс", "Возврат аванса из-за уменьшения стоимости")
-        
+            self.advance = new_price
+
+        if new_price < self.total_received:
+            raise ValueError(
+                f"Новая стоимость ({new_price}) не может быть меньше уже "
+                f"полученной суммы ({self.total_received})"
+            )
+
         self.price = new_price
 
     def delete_payment(self, payment_id: str) -> bool:

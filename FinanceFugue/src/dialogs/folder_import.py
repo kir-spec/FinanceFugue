@@ -114,8 +114,19 @@ class FolderImportDialog(QDialog):
         # 1. Выбрана папка с клиентами (внутри папки клиентов, внутри папки заказов)
         # 2. Выбрана папка одного клиента (внутри папки заказов)
         
-        root_items = [os.path.join(folder, item) for item in os.listdir(folder)]
-        subfolders = [d for d in root_items if os.path.isdir(d)]
+        try:
+            root_items = [
+                os.path.join(folder, item)
+                for item in os.listdir(folder)
+            ]
+        except OSError as e:
+            QMessageBox.warning(
+                self,
+                "Ошибка",
+                f"Не удалось прочитать папку:\n{folder}\n\n{e}",
+            )
+            return
+        subfolders = [d for d in root_items if os.path.isdir(d)]     
         
         # Предполагаем, что выбрана корневая папка, содержащая КЛИЕНТОВ.
         # Проходимся по каждой папке (Клиенту)

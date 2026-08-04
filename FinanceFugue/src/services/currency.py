@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Iterable
 
 CURRENCY_SYMBOLS = {
@@ -16,8 +17,14 @@ def currency_symbol(code: str) -> str:
     return CURRENCY_SYMBOLS.get((code or "RUB").upper(), code or "RUB")
 
 
+def _round_half_up(amount: float) -> Decimal:
+    """Финансовое округление (HALF_UP), а не банкирское HALF_EVEN."""
+    return Decimal(str(amount)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
 def format_amount(amount: float, currency: str = "RUB") -> str:
-    return f"{amount:,.0f} {currency_symbol(currency)}"
+    rounded = _round_half_up(amount)
+    return f"{rounded:,} {currency_symbol(currency)}".replace(",", " ")
 
 
 def format_multi_currency(totals: dict[str, float]) -> str:
@@ -53,3 +60,13 @@ def sum_by_currency(
             raise ValueError(f"Unknown field: {field}")
         totals[currency] += value
     return dict(totals)
+
+
+def has_outstanding_debt(debt_by_currency: dict[str, float]) -> bool:
+    """Семантически корректная проверка «есть ли долги» с учётом валют.
+
+    Раньше делали ``sum(debt_by_currency.values()) > 0`` — это смешивало
+    разные валюты (например, RUB-долг и EUR-долг давали сумму, отличную
+    от любого реального значения).
+    """
+    return any(v > 0 for v in debt_by_currency.values())

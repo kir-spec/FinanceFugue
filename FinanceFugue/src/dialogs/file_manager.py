@@ -107,9 +107,13 @@ class FileManagerDialog(QDialog):
         if kind == "file":
             parent_order = item.parent()
             parent_client = parent_order.parent() if parent_order else None
-            if parent_order and parent_client:
-                order_id = parent_order.data(0, self.ROLE_ORDER_ID)
-                client_id = parent_client.data(0, self.ROLE_CLIENT_ID)
+            if not parent_order or not parent_client:
+                QMessageBox.information(
+                    self, APP_NAME, "Перетащите файл на клиента или заказ."
+                )
+                return None, None
+            order_id = parent_order.data(0, self.ROLE_ORDER_ID)
+            client_id = parent_client.data(0, self.ROLE_CLIENT_ID)
         elif kind == "client":
             order_id = None
 

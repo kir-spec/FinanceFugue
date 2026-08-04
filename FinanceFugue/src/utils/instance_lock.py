@@ -48,8 +48,13 @@ class InstanceLock:
                 fcntl.flock(self._file.fileno(), fcntl.LOCK_UN)
         except OSError:
             pass
-        self._file.close()
-        self._file = None
+        finally:
+            # Закрываем файл даже при исключении, чтобы не утекал FD.
+            try:
+                self._file.close()
+            except OSError:
+                pass
+            self._file = None
         try:
             self._path.unlink(missing_ok=True)
         except OSError:

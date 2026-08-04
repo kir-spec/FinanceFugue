@@ -2,7 +2,7 @@
 from typing import List
 
 from ..models import Client
-from .currency import format_multi_currency, sum_by_currency
+from .currency import format_multi_currency, has_outstanding_debt, sum_by_currency
 
 
 def calculate_client_stats(client: Client) -> dict:
@@ -48,6 +48,6 @@ def calculate_global_dashboard(clients: List[Client]) -> list[tuple[str, str, st
         ("📋 В РАБОТЕ", str(in_work), "#00D1FF"),
         ("✅ ВЫПОЛНЕНО", str(done), "#28A745"),
         ("💰 АВАНСЫ", format_multi_currency(advance_by), "#FFD700"),
-        ("💳 ДОЛГИ", format_multi_currency(debt_by), "#FF4B2B" if sum(debt_by.values()) > 0 else "#28A745"),
+        ("💳 ДОЛГИ", format_multi_currency(debt_by), "#FF4B2B" if has_outstanding_debt(debt_by) else "#28A745"),
         ("💵 КАССА", format_multi_currency(cash_by), "#28A745"),
     ]

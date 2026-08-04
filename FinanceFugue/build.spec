@@ -10,9 +10,10 @@ a = Analysis(
     datas=[
         ('help.html', '.'),
         ('EULA.md', '.'),
-        ('PRIVACY.md', '.'),
         ('LICENSE', '.'),
+        ('PRIVACY.md', '.'),
         ('THIRD_PARTY_LICENSES.txt', '.'),
+        ('resources/eula.html', 'resources'),
         ('images', 'images'),
     ],
     hiddenimports=['src', 'src.dialogs', 'src.services', 'src.ui', 'src.utils'],

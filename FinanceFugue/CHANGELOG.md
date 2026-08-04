@@ -1,5 +1,71 @@
 # Changelog
 
+## 04.08.2026 — версия 04.08.2026 + полное Пользовательское соглашение
+
+### Пользовательское соглашение (EULA) — полный пакет
+
+**По образцу KoshaDrive** (`/E:\coding\KoshaDrive`), адаптировано под локальную CRM:
+
+- **`EULA.md`** — полный текст редакции `FF-EULA-04.08.2026-1` (8 разделов,
+  ~280 строк). Ключевые отличия от KoshaDrive:
+  - **§2 Локальная архитектура** — явный отказ от облачных функций, никаких
+    серверов лицензий, никаких telemetry.
+  - **§3 Демо без ограничения срока** (KoshaDrive — 14 дней).
+  - **§5 Телеметрии по умолчанию нет, только ручной mailto** (KoshaDrive —
+    автоматические crash-reports).
+  - **§7 Императивное право РФ + защита потребителя** через императивные нормы.
+- **`resources/eula.html`** — HTML-шаблон (8 разделов + TOC) с плейсхолдерами
+  `{{REVISION}}` и `{{DATE}}`. Стилизация под dark theme (Segoe UI, цвета
+  theme.py: info-box, warn-box, ok-box).
+- **`src/services/eula_renderer.py`** — заполнитель плейсхолдеров и
+  fallback для случая, когда HTML отсутствует. Поддерживает PyInstaller
+  frozen-exe через `sys._MEIPASS`.
+- **`src/dialogs/eula.py`** — модальный диалог с **обязательной прокруткой**
+  текста до конца + флажком для активации кнопки «Принять» (gold pattern
+  KoshaDrive). Ширина/высота увеличена до 820×640 для комфортного чтения.
+- **`src/dialogs/about.py`** — рефакторинг для использования HTML-версии EULA
+  во вкладке «Лицензия». Прочие вкладки остались.
+- **`docs/HELP_USER_AGREEMENT.md`** — заметки для разработчиков: структура,
+  адаптация от KoshaDrive, versioning policy, метрики.
+
+### Версия 04.08.2026
+
+В `src/__init__.py`:
+- `VERSION = "04.08.2026"` (user-visible, для UI и dialog заголовков).
+- `VERSION_DATE = "04.08.2026"` (alias для единообразия с KoshaDrive).
+- `EULA_VERSION = "FF-EULA-04.08.2026-1"` (ревизия соглашения).
+- `__version_semver__ = "1.0.0"` (для pyproject / pip).
+
+В `pyproject.toml`: `release_date = "04.08.2026"`.
+
+В `build.spec`: добавлено `(resources/eula.html)` в `datas` для упаковки.
+
+### Тесты
+
+- **`tests/test_version_eula.py`** — 11 новых тестов:
+  - проверка всех констант версии (VERSION, VERSION_DATE, EULA_VERSION, SemVer)
+  - `eula_renderer` (regex, substitution, fallback, missing-mark)
+  - структура `EULA.md` (наличие всех 8 разделов + `EULA_VERSION` в заголовке)
+  - плейсхолдеры `{{REVISION}}` и `{{DATE}}` в `resources/eula.html`.
+- **`tests/qt/test_eula_dialog.py`** — обновлён под новый UX: кнопка «Принять»
+  активна **только после прокрутки + флажка** (KoshaDrive pattern).
+  Добавлен тест `test_eula_dialog_html_contains_revision`.
+
+### Stats
+
+- pytest: **89 passed** (было 75), 0 failed.
+- ruff: All checks passed.
+- bandit: 0/0/0/0.
+- Security score: 9/10.
+
+### Известные TODO (вне scope этого релиза)
+
+- Country-specific инъекция через `{{COUNTRY_GOVERNING_LAW}}` и т.п.
+  (KoshaDrive использует; FinanceFugue — упрощённая версия).
+- HWID-based licensing (для будущих коммерческих сборок с ключами).
+
+---
+
 ## 04.08.2026 — security audit & bugfixes (round 3)
 
 ### Исправлено (HIGH из TZ)

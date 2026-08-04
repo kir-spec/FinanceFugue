@@ -1,6 +1,10 @@
 [project]
 name = "FinanceFugue"
 version = "1.0.0"
+# Пользовательская версия (отображается в UI). Всегда совпадает
+# с MAJOR.MINOR.PATCH при релизе.
+# HISTORY: 04.08.2026 — commercial release; см. CHANGELOG.md.
+release_date = "04.08.2026"
 description = "Десктопная CRM для управления клиентами и заказами (PySide6)"
 readme = "README.md"
 requires-python = ">=3.11"

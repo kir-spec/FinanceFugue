@@ -3,11 +3,16 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtWidgets import QFileDialog, QMessageBox, QDialog
+from PySide6.QtCore import QThreadPool
+from PySide6.QtWidgets import (
+    QFileDialog, QMessageBox, QDialog, QProgressDialog,
+)
 
 from .... import APP_NAME
 from ....dialogs import FolderImportDialog
-from ....services.backup import create_full_backup_zip, format_database_size
+from ....services.backup import (
+    BackupWorker, create_full_backup_zip, format_database_size,
+)
 from ....services.database_io import export_database, import_database_with_backup
 from ....services.folder_import_service import apply_folder_scan_results, scan_client_folder
 from ....storage import CRMStorage, DatabaseLoadError
@@ -153,7 +158,8 @@ class DatabaseOpsMixin:
                 if msg_box.clickedButton() != btn_yes:
                     return
                 imported_clients, backup_path = import_database_with_backup(
-                    Path(path), self.storage
+                    target_storage=self.storage,
+                    preloaded_clients=preview,
                 )
                 self.clients = imported_clients
                 self.current_client = None
@@ -182,16 +188,70 @@ class DatabaseOpsMixin:
         )
         if not path:
             return
-        try:
-            file_count = create_full_backup_zip(Path(path), self.storage.path, self.clients)
+
+        zip_path = Path(path)
+        # Маленькая база → бэкапим синхронно (прогресс-бар излишен).
+        if len(self.clients) <= 5:
+            try:
+                file_count = create_full_backup_zip(
+                    zip_path, self.storage.path, self.clients
+                )
+                QMessageBox.information(
+                    self,
+                    "Резервная копия создана",
+                    f"Полная резервная копия успешно создана:\n\nФайл: {path}\n"
+                    f"Клиентов: {len(self.clients)}\nФайлов в архиве: {file_count}",
+                )
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Ошибка",
+                    f"Не удалось создать резервную копию:\n{e}",
+                )
+            return
+
+        # Большая база → QThreadPool + прогресс-бар.
+        progress = QProgressDialog(
+            "Создание резервной копии...", "Отмена", 0, 100, self
+        )
+        progress.setWindowTitle("Бэкап")
+        progress.setMinimumDuration(500)  # показать только если >0.5s
+        progress.setValue(0)
+
+        worker = BackupWorker(zip_path, self.storage.path, self.clients)
+
+        def _on_progress(done: int, total: int) -> None:
+            pct = int(done * 100 / total) if total else 100
+            progress.setValue(pct)
+            progress.setLabelText(
+                f"Создание резервной копии... {done}/{total}"
+            )
+
+        def _on_cancel() -> None:
+            progress.cancel()
+            logger.info("Бэкап отменён пользователем")
+
+        def _on_finished(count: int) -> None:
+            progress.close()
             QMessageBox.information(
                 self,
                 "Резервная копия создана",
                 f"Полная резервная копия успешно создана:\n\nФайл: {path}\n"
-                f"Клиентов: {len(self.clients)}\nФайлов в архиве: {file_count}",
+                f"Клиентов: {len(self.clients)}\nФайлов в архиве: {count}",
             )
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось создать резервную копию:\n{e}")
+
+        def _on_error(msg: str) -> None:
+            progress.close()
+            QMessageBox.critical(
+                self, "Ошибка",
+                f"Не удалось создать резервную копию:\n{msg}",
+            )
+
+        worker.signals.progress.connect(_on_progress)
+        worker.signals.finished.connect(_on_finished)
+        worker.signals.error.connect(_on_error)
+        progress.canceled.connect(_on_cancel)
+
+        QThreadPool.globalInstance().start(worker)
 
     def get_database_size(self):
         return format_database_size(self.storage.path)

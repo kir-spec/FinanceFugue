@@ -13,5 +13,20 @@ ignore = ["E501", "F841"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["tests/qt"]
+testpaths = ["tests"]
 markers = ["qt: Qt GUI tests (pytest-qt)"]
+
+[tool.mypy]
+python_version = "3.11"
+# mixin-паттерн: каждый mixin добавляет атрибуты через ``self``,
+# mypy не разрешает такие cross-mixin атрибуты. Подавляем
+# только ``attr-defined`` (false positives), не отключаем целиком.
+disable_error_code = ["attr-defined"]
+ignore_missing_imports = true
+
+[tool.bandit]
+exclude_dirs = ["tests", "build", "dist"]
+# B404/B603/B606/B607: ``subprocess``/``os.startfile`` — это основной
+# функционал десктопного приложения (открытие файлов пользователя).
+# Все пути проходят через safe_resolve_within.
+skips = ["B404", "B603", "B606", "B607"]

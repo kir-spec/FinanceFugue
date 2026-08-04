@@ -10,15 +10,19 @@ from PySide6.QtWidgets import (
     QMessageBox, QMenu, QInputDialog, QLineEdit,
 )
 
+from ..logger import get_logger
 from ..models import ProjectFile, Order
 from ..ui.app_bridge import AppBridge
-from ..utils.path_safety import safe_filename_candidate
+from ..utils.path_safety import is_path_within, safe_filename_candidate
 from ..theme import (
     BUTTON_COMPACT_STYLE,
     BUTTON_DANGER_COMPACT_STYLE,
     FILE_NAME_FILE_STYLE,
     FILE_NAME_FOLDER_STYLE,
 )
+
+
+logger = get_logger("Widgets")
 
 
 class FileItemWidget(QWidget):
@@ -114,19 +118,39 @@ class FileItemWidget(QWidget):
     def open_file(self):
         try:
             path = self.file_obj.path
-            if os.path.exists(path):
-                if platform.system() == "Windows":
-                    os.startfile(path)
-                elif platform.system() == "Darwin":
-                    subprocess.Popen(["open", path])
-                else:
-                    subprocess.Popen(["xdg-open", path])
-            else:
+            if not os.path.exists(path):
                 QMessageBox.warning(
                     self,
                     "Объект не найден",
                     f"Объект '{self.file_obj.name}' не найден по пути:\n{path}",
                 )
+                return
+
+            # Защита от symlink-атак: если путь — symlink,
+            # резолвим и проверяем, что цель не ушла за пределы
+            # ожидаемой зоны (директория файла из БД).
+            try:
+                if os.path.islink(path):
+                    expected_dir = os.path.dirname(path) or "."
+                    if not is_path_within(path, expected_dir):
+                        QMessageBox.warning(
+                            self, "Небезопасный путь",
+                            f"Файл '{self.file_obj.name}' является символической ссылкой\n"
+                            f"за пределы ожидаемой директории. Открытие заблокировано.",
+                        )
+                        logger.warning(
+                            "Отклонён symlink при открытии: %s", path
+                        )
+                        return
+            except OSError as e:
+                logger.warning("Symlink-проверка не удалась для %s: %s", path, e)
+
+            if platform.system() == "Windows":
+                os.startfile(path)
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
         except OSError as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось открыть объект: {e}")
 

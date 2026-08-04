@@ -4,11 +4,10 @@ from datetime import datetime
 
 from PySide6.QtWidgets import QInputDialog, QLineEdit, QListWidgetItem, QMenu, QMessageBox
 from PySide6.QtGui import QAction
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QRunnable, QThreadPool
 
 from ....models import Client
 from ....services.client_deletion import (
-    cleanup_empty_attached_dirs,
     delete_client_files_from_disk,
 )
 from ....theme import MENU_STYLE
@@ -216,6 +215,9 @@ class ClientListMixin:
             if warn_box.clickedButton() != btn_yes:
                 return
 
+        # Сначала удаляем из списка и сохраняем БД, и только
+        # затем обновляем UI. Иначе при исключении в save_db()
+        # UI уже обновлён, но диск — нет (inconsistent).
         for c in target_clients:
             if c in self.clients:
                 if delete_from_disk:
@@ -226,11 +228,27 @@ class ClientListMixin:
             self.current_client = None
             self.clear_profile_layout()
 
+        # save_db() идёт до refresh_list: при исключении на диске
+        # остаётся актуальное состояние, UI просто перестанет показывать.
+        try:
+            self.save_db()
+        except Exception as e:  # noqa: BLE001
+            logger.error("Не удалось сохранить после удаления: %s", e, exc_info=True)
+            QMessageBox.critical(
+                self, "Ошибка",
+                f"Не удалось сохранить базу данных:\n{e}",
+            )
+            return
+
         self.refresh_list()
-        self.save_db()
 
         if delete_from_disk:
-            cleanup_empty_attached_dirs(os.path.dirname(self.storage.path), log=logger)
+            # Sync fs walk can stall UI on huge trees;
+            # run in background via QThreadPool.
+            db_dir = os.path.dirname(self.storage.path)
+            QThreadPool.globalInstance().start(
+                _CleanupTask(db_dir, logger_name="MainWindow")
+            )
 
     def add_client(self):
         name, ok = QInputDialog.getText(
@@ -258,3 +276,24 @@ class ClientListMixin:
                     self.cl_list.setCurrentItem(item)
                     self.select_client(item)
                     break
+
+
+class _CleanupTask(QRunnable):
+    """Background walker для удаления пустых папок в attached_files.
+
+    Внутри QThreadPool.globalInstance: не блокирует UI на больших деревьях.
+    """
+
+    def __init__(self, db_folder: str, *, logger_name: str | None = None):
+        super().__init__()
+        self.db_folder = db_folder
+        self._logger_name = logger_name or "FinanceFugue"
+
+    def run(self) -> None:
+        import logging
+        from ....services.client_deletion import cleanup_empty_attached_dirs
+        log = logging.getLogger(self._logger_name)
+        try:
+            cleanup_empty_attached_dirs(self.db_folder, log=log)
+        except Exception as e:  # noqa: BLE001
+            log.error("Background cleanup failed: %s", e, exc_info=True)

@@ -42,26 +42,53 @@ class Order:
     status: str = "В работе"
     files: List[ProjectFile] = field(default_factory=list)
     payments: List[Payment] = field(default_factory=list)
+    # Кэши для агрегатов. Пересчитываются вручную через
+    # ``_recalculate_totals`` при мутации ``payments``.
+    # Это устраняет O(N) итерации на каждое обращение к ``debt``,
+    # ``advance_debt`` и т.п. (важно для UI с 1000+ платежей).
+    _total_received_cache: float = field(default=0.0, init=False, repr=False, compare=False)
+    _total_advance_cache: float = field(default=0.0, init=False, repr=False, compare=False)
+    _total_payments_cache: float = field(default=0.0, init=False, repr=False, compare=False)
+    _total_corrections_cache: float = field(default=0.0, init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        # Если платежи переданы в конструктор (например, из БД),
+        # прогреваем кэш сразу, иначе все total_* будут нулями
+        # до первого add/delete_payment.
+        if self.payments:
+            self._recalculate_totals()
+            # Совместимость с add_payment: при загрузке из БД
+            # платежи типа "аванс" автоматически поднимают advance.
+            if self.total_advance_received > 0:
+                self.advance = max(self.advance, self.total_advance_received)
+
+    def _recalculate_totals(self) -> None:
+        self._total_received_cache = sum(p.amount for p in self.payments)
+        self._total_advance_cache = sum(
+            p.amount for p in self.payments if p.type == "аванс"
+        )
+        self._total_payments_cache = sum(
+            p.amount for p in self.payments if p.type == "платеж"
+        )
+        self._total_corrections_cache = sum(
+            p.amount for p in self.payments if p.type == "корректировка"
+        )
 
     @property
     def total_received(self) -> float:
-        """Общая сумма полученных платежей"""
-        return sum(p.amount for p in self.payments)
+        return self._total_received_cache
 
     @property
     def total_advance_received(self) -> float:
-        """Сумма полученных авансов"""
-        return sum(p.amount for p in self.payments if p.type == "аванс")
+        return self._total_advance_cache
 
     @property
     def total_payments_received(self) -> float:
-        """Сумма полученных регулярных платежей"""
-        return sum(p.amount for p in self.payments if p.type == "платеж")
+        return self._total_payments_cache
 
     @property
     def total_corrections_received(self) -> float:
-        """Сумма корректировок"""
-        return sum(p.amount for p in self.payments if p.type == "корректировка")
+        return self._total_corrections_cache
 
     @property
     def debt(self) -> float:
@@ -129,7 +156,8 @@ class Order:
         )
         
         self.payments.append(payment)
-        
+        self._recalculate_totals()
+
         # Если это аванс и сумма аванса изменилась, обновляем advance
         if payment_type == "аванс":
             self.advance = max(self.advance, self.total_advance_received)
@@ -192,8 +220,9 @@ class Order:
                     remaining_advance = self.total_advance_received - payment.amount
                     if remaining_advance < 0:
                         raise ValueError("Невозможно удалить платеж: аванс станет отрицательным")
-                
+
                 self.payments.pop(i)
+                self._recalculate_totals()
                 return True
         return False
 

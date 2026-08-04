@@ -3,7 +3,7 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from ..models import Client
 from ..storage import CRMStorage, _extract_clients_payload, _parse_clients_list
@@ -18,19 +18,31 @@ def load_database_file(path: Path) -> List[Client]:
 
 
 def import_database_with_backup(
-    source_path: Path,
-    target_storage: CRMStorage,
-) -> Tuple[List[Client], Path | None]:
+    source_path: Optional[Path] = None,
+    target_storage: Optional[CRMStorage] = None,
+    *,
+    preloaded_clients: Optional[List[Client]] = None,
+) -> Tuple[List[Client], Optional[Path]]:
     """
     Загружает клиентов из файла. Возвращает (clients, backup_path).
     backup_path создаётся только если целевая база уже существовала.
+
+    Поддерживает два варианта:
+    * ``source_path``+``target_storage`` — загрузить из файла.
+    * ``preloaded_clients``+``target_storage`` — клиенты уже загружены
+      вызывающим кодом (preview в UI). Без двойного парсинга JSON.
     """
-    imported = load_database_file(source_path)
+    if preloaded_clients is not None:
+        imported = preloaded_clients
+    elif source_path is not None:
+        imported = load_database_file(source_path)
+    else:
+        raise ValueError("Нужен source_path или preloaded_clients")
     if not imported:
         raise ValueError("Файл не содержит данных")
 
     backup_path = None
-    if target_storage.path.exists():
+    if target_storage is not None and target_storage.path.exists():
         backup_path = target_storage.path.with_suffix(
             f".backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         )

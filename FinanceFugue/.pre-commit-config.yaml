@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: pytest (fast)
+        entry: python -m pytest tests/ -q --tb=short -x --ignore=tests/qt
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [manual]
+
+      - id: bandit-fast
+        name: bandit
+        entry: python -m bandit -c pyproject.toml -r src/ -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [manual]

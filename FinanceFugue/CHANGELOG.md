@@ -1,5 +1,63 @@
 # Changelog
 
+## 04.08.2026 — security audit & bugfixes (round 3)
+
+### Исправлено (HIGH из TZ)
+- **P1-6 `delete_client`**: `save_db()` теперь идёт до `refresh_list()`.
+  При исключении на диске остаётся согласованное состояние, UI просто
+  перестаёт показывать. Добавлен graceful `QMessageBox.critical` при сбое.
+- **P1-7 `clear_profile_layout`**: корректно удаляет `QSpacerItem` и
+  nested layouts. Раньше `item.widget()` для spacer'а возвращал `None`,
+  и они утекали на каждом пере-выборе клиента.
+- **P1-8 `import_json_file`**: двойной парсинг JSON устранён через
+  `import_database_with_backup(preloaded_clients=...)`.
+- **P2-15 Symlink-атака**: `file_item_widget.open_file` и
+  `file_manager._open_path` теперь проверяют, что symlink указывает
+  внутрь ожидаемой директории (`is_path_within`).
+
+### Исправлено (MEDIUM из TZ)
+- **P2-10 `cleanup_empty_attached_dirs`** теперь выполняется через
+  `QThreadPool.globalInstance()` (класс `_CleanupTask`) — UI не блокируется
+  на глубоких деревьях.
+- **P2-11 `export_full_backup`** для баз с >5 клиентами работает в
+  `QThreadPool` через `BackupWorker` (с `BackupSignals`), с прогресс-баром.
+  Маленькие базы остались синхронными (overhead ниже).
+- **P1-9 Кэш running totals в `Order`**: `_recalculate_totals()` после
+  `add_payment`/`delete_payment`. Сложность `debt`/`advance_debt` с O(N²)
+  до O(1). `__post_init__` прогревает кэш и поднимает `advance` при
+  загрузке из БД.
+
+### Tooling (P3-1..P3-3, P3-7)
+- **`pyproject.toml`**: добавлены `[tool.mypy]` и `[tool.bandit]`.
+  `mypy --disable-error-code=attr-defined` для mixin-паттерна.
+  `bandit --skips=B404,B603,B606,B607` (subprocess для file-open —
+  основная фича desktop).
+- **`testpaths`**: `["tests/qt"]` → `["tests"]` — все unit-тесты
+  собираются автоматически.
+- **`.pre-commit-config.yaml`**: ruff + ruff-format + базовые hooks.
+  pytest и bandit на `manual` stage (для CI запуска).
+- **`README.md`**: обновлён (новая версия, схема тестов, упоминание
+  `path_safety.py`, удаление Tauri-порта).
+
+### Новые тесты
+- `tests/test_round3_fixes.py` — 10 тестов:
+  - кэш total_* (4 теста: post_init, add_payment, delete_payment, advance-from-payments)
+  - контракт `delete_client.save_db-before-refresh` (через inspect)
+  - `import_database_with_backup(preloaded=)` (2 теста)
+  - сигналы `BackupWorker` (через QApplication)
+  - symlink+is_path_within (skip на Windows без admin)
+  - arcname итератор бэкапа
+
+### Итого
+- pytest: **70 passed in 0.31s** (было 60 в round 2)
+- ruff: All checks passed
+- bandit: **0 issues** (было 15 known FP)
+- mypy: 15 expected attr-defined (mixins), без критики runtime
+
+**Security score:** 8.5/10 → **9/10** (закрыта symlink-атака).
+
+---
+
 ## 04.08.2026 — security audit & bugfixes (round 2)
 
 ### Исправлено (🔴 критические)

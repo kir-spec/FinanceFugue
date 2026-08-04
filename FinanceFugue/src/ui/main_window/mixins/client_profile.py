@@ -28,12 +28,32 @@ from ....widgets import OrderWidget
 
 class ClientProfileMixin:
     def clear_profile_layout(self):
+        """Полностью очищает profile_layout.
+
+        Предыдущая версия утекала ``QSpacerItem`` на каждом
+        пере-выборе клиента (``item.widget()`` возвращает
+        ``None`` для spacer'ов, и они просто исчезали из layout
+        без удаления). Теперь обрабатываются все item-type.
+        """
         while self.profile_layout.count():
             item = self.profile_layout.takeAt(0)
             widget = item.widget()
-            if widget and widget != self.placeholder:
-                widget.setParent(None)
-                widget.deleteLater()
+            if widget is not None:
+                if widget is not self.placeholder:
+                    widget.setParent(None)
+                    widget.deleteLater()
+            else:
+                # layout-item без виджета: spacer или nested layout.
+                spacer = item.spacerItem()
+                if spacer is not None:
+                    # QSpacerItem не имеет deleteLater: достаточно
+                    # отвязать от layout; Python GC вернёт память.
+                    del spacer
+                else:
+                    nested = item.layout()
+                    if nested is not None:
+                        nested.setParent(None)
+                        nested.deleteLater()
 
         if not self.current_client:
             self.placeholder.show()

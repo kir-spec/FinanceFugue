@@ -89,6 +89,20 @@ class FileManagerDialog(QDialog):
         if not path or not os.path.exists(path):
             QMessageBox.warning(self, APP_NAME, "Файл или папка не найдены.")
             return
+
+        # Reject symlinks, указывающие за пределы attached_files.
+        if os.path.islink(path):
+            from ..utils.path_safety import is_path_within
+            db_folder = os.path.dirname(self._window.storage.path) or os.getcwd()
+            allowed_root = os.path.join(db_folder, "attached_files")
+            if not is_path_within(path, allowed_root):
+                QMessageBox.warning(
+                    self, APP_NAME,
+                    "Символическая ссылка за пределы базы данных. "
+                    "Открытие заблокировано.",
+                )
+                return
+
         try:
             if sys.platform == "win32":
                 os.startfile(path)

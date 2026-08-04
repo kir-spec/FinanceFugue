@@ -12,6 +12,15 @@ from ....logger import get_logger
 logger = get_logger("MainWindow")
 
 
+def _sanitize_filename(name: str) -> str:
+    """Удаляет символы, запрещённые в именах файлов Windows."""
+    import re
+    if not name:
+        return "_"
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip().rstrip(".")
+    return cleaned or "_"
+
+
 class ClientExportMixin:
     def export_client_files(self):
         """Экспорт всех файлов клиента с объяснением"""
@@ -55,7 +64,11 @@ class ClientExportMixin:
 
             os.makedirs(date_folder, exist_ok=True)
 
-            archive_name = f"{order.service_type}_{order.id[:8]}.zip"
+            safe_service = _sanitize_filename(order.service_type)
+            safe_id = _sanitize_filename(order.id[:8])
+            archive_name = f"{safe_service}_{safe_id}.zip"
+            if not archive_name.strip("._"):
+                archive_name = f"order_{safe_id}.zip"
             archive_path = os.path.join(date_folder, archive_name)
 
             try:
@@ -100,7 +113,8 @@ class ClientExportMixin:
             if not folder:
                 return
 
-            json_path = os.path.join(folder, f"{self.current_client.name}_заказы.json")
+            safe_name = _sanitize_filename(self.current_client.name)
+            json_path = os.path.join(folder, f"{safe_name}_заказы.json")
             try:
                 orders_data = []
                 for order in export_data["selected_orders"]:
@@ -125,7 +139,9 @@ class ClientExportMixin:
                     os.makedirs(files_folder, exist_ok=True)
 
                     for order in export_data["selected_orders"]:
-                        order_folder = os.path.join(files_folder, order.service_type)
+                        order_folder = os.path.join(
+                            files_folder, _sanitize_filename(order.service_type)
+                        )
                         os.makedirs(order_folder, exist_ok=True)
 
                         for file in order.files:

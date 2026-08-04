@@ -1,6 +1,7 @@
 import os
 import platform
 import subprocess
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal as pyqtSignal
 from PySide6.QtGui import QAction
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from ..models import ProjectFile, Order
 from ..ui.app_bridge import AppBridge
+from ..utils.path_safety import safe_filename_candidate
 from ..theme import (
     BUTTON_COMPACT_STYLE,
     BUTTON_DANGER_COMPACT_STYLE,
@@ -70,18 +72,38 @@ class FileItemWidget(QWidget):
             QLineEdit.EchoMode.Normal,
             self.file_obj.name,
         )
-        if ok and new_name.strip() and new_name != self.file_obj.name:
-            old_path = self.file_obj.path
-            new_path = os.path.join(os.path.dirname(old_path), new_name.strip())
-            try:
-                os.rename(old_path, new_path)
-                self.file_obj.path = new_path
-                self.file_obj.name = new_name.strip()
-                self.name_label.setText(new_name.strip())
-                self._bridge.request_save()
-                QMessageBox.information(self, "Успех", "Файл переименован")
-            except OSError as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось переименовать файл: {e}")
+        if not ok or not new_name.strip() or new_name == self.file_obj.name:
+            return
+
+        sanitized = safe_filename_candidate(new_name)
+        if sanitized != new_name.strip() or sanitized in {"", "_"}:
+            QMessageBox.warning(
+                self,
+                "Недопустимое имя",
+                "Имя содержит запрещённые символы (``..``,\n"
+                "/\\ и т. п.). Исправлено автоматически.",
+            )
+            return
+
+        old_path = Path(self.file_obj.path)
+        new_path = old_path.parent / sanitized
+        if new_path.exists() and new_path != old_path:
+            QMessageBox.warning(
+                self, "Файл уже существует", f"Файл уже существует:\n{new_path}"
+            )
+            return
+
+        try:
+            old_path.rename(new_path)
+        except OSError as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось переименовать файл: {e}")
+            return
+
+        self.file_obj.path = str(new_path)
+        self.file_obj.name = sanitized
+        self.name_label.setText(sanitized)
+        self._bridge.request_save()
+        QMessageBox.information(self, "Успех", "Файл переименован")
 
     def mouseReleaseEvent(self, event):
         """Игнорируем клики по дочерним кнопкам, чтобы не дублировать открытие."""

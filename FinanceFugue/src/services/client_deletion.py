@@ -7,17 +7,18 @@ import shutil
 from typing import Iterable
 
 from ..models import Client
+from ..utils.path_safety import is_path_within
 
 logger = logging.getLogger("ClientDeletion")
 
 
 def is_safe_to_delete(file_path: str, safe_root: str) -> bool:
-    try:
-        return os.path.commonpath(
-            [os.path.abspath(file_path), os.path.abspath(safe_root)]
-        ) == os.path.abspath(safe_root)
-    except ValueError:
-        return False
+    """True, если ``file_path`` находится внутри ``safe_root``.
+
+    Использует ``Path.resolve()`` (разворачивает ``..`` и symlink-и)
+    и учитывает регистр Windows.
+    """
+    return is_path_within(file_path, safe_root)
 
 
 def delete_client_files_from_disk(

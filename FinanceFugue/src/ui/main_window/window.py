@@ -100,7 +100,15 @@ class FinanceFugueWindow(
             if not self.show_first_run_dialog():
                 sys.exit(0)
 
-        QTimer.singleShot(800, lambda: self.check_deadline_notifications(popup=True))
+        # Без popup=True: пугающее окно с дедлайнами на старте —
+        # спам. Только status bar при холодном старте.
+        _boot_timer = QTimer(self)
+        _boot_timer.setSingleShot(True)
+        _boot_timer.timeout.connect(
+            lambda: self.check_deadline_notifications(popup=False)
+        )
+        _boot_timer.start(800)
+
         self._deadline_timer = QTimer(self)
         self._deadline_timer.setInterval(30 * 60 * 1000)
         self._deadline_timer.timeout.connect(

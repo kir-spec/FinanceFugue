@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 import uuid
 from dataclasses import asdict
@@ -14,6 +15,22 @@ logger = logging.getLogger("Storage")
 
 class DatabaseLoadError(Exception):
     """База данных существует, но не может быть прочитана."""
+
+
+def _finite_float(value: Any, *, field: str, default: float) -> float:
+    """Возвращает float(value), если он конечный, иначе default.
+
+    NaN и ±Inf из повреждённого JSON молча приводят к default,
+    чтобы ``debt = max(0, price - inf) = 0`` не показывал ``nan ₽``.
+    """
+    try:
+        f = float(value)
+        if math.isfinite(f):
+            return f
+        logger.warning("Не конечное значение %s=%r, заменяю на %s", field, value, default)
+        return default
+    except (TypeError, ValueError):
+        return default
 
 
 def _parse_clients_list(data: list) -> List[Client]:
@@ -39,22 +56,22 @@ def _parse_clients_list(data: list) -> List[Client]:
                 payments.append(
                     Payment(
                         id=p.get("id", str(uuid.uuid4())),
-                        type=p.get("type", "платеж"),
-                        amount=p.get("amount", 0.0),
-                        date=p.get("date", ""),
-                        note=p.get("note", ""),
+                        type=p.get("type", "платеж") or "платеж",
+                        amount=_finite_float(p.get("amount", 0.0), field="payment.amount", default=0.0),
+                        date=p.get("date", "") or "",
+                        note=p.get("note", "") or "",
                     )
                 )
             orders.append(
                 Order(
                     id=o["id"],
-                    service_type=o.get("service_type", ""),
-                    price=o.get("price", 0.0),
-                    currency=o.get("currency", "RUB"),
-                    advance=o.get("advance", 0.0),
-                    created_at=o.get("created_at", ""),
-                    deadline=o.get("deadline", ""),
-                    status=o.get("status", "В работе"),
+                    service_type=o.get("service_type", "") or "",
+                    price=_finite_float(o.get("price", 0.0), field="order.price", default=0.0),
+                    currency=o.get("currency", "RUB") or "RUB",
+                    advance=_finite_float(o.get("advance", 0.0), field="order.advance", default=0.0),
+                    created_at=o.get("created_at", "") or "",
+                    deadline=o.get("deadline", "") or "",
+                    status=o.get("status", "В работе") or "В работе",
                     files=files,
                     payments=payments,
                 )

@@ -1,3 +1,4 @@
+import math
 import uuid
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -94,11 +95,14 @@ class Order:
 
         Валидация:
         * 0 запрещён;
+        * значение должно быть конечным (NaN/Inf отклоняются);
         * положительный платёж не должен превышать остаток долга;
         * отрицательный платёж (возврат) не должен превышать полученную сумму.
           Раньше при переплате ``debt == 0`` и любой положительный платёж
           проходил проверку — теперь это тоже блокируется.
         """
+        if not math.isfinite(amount):
+            raise ValueError("Сумма платежа должна быть конечным числом")
         if amount == 0:
             raise ValueError("Сумма платежа не может быть нулевой")
 
@@ -132,6 +136,8 @@ class Order:
 
     def update_advance(self, new_advance: float):
         """Обновить сумму аванса"""
+        if not math.isfinite(new_advance):
+            raise ValueError("Аванс должен быть конечным числом")
         if new_advance < 0:
             raise ValueError("Аванс не может быть отрицательным")
         
@@ -159,6 +165,8 @@ class Order:
         и ``price``. Раньше порядок был обратный, и ``add_payment`` откатывал
         ``self.advance`` через ``max(self.advance, total_advance_received)``.
         """
+        if not math.isfinite(new_price):
+            raise ValueError("Стоимость должна быть конечным числом")
         if new_price < 0:
             raise ValueError("Стоимость не может быть отрицательной")
 

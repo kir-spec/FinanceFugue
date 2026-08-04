@@ -40,9 +40,10 @@ class OrderFilesMixin:
         
         # Обрабатываем папки
         for folder_path in folders_to_handle:
-            # Считаем файлы в папке
+            # followlinks=False защищает от symlink-циклов и
+            # ссылок, указывающих вне предполагаемой зоны.
             all_files = []
-            for root, dirs, files in os.walk(folder_path):
+            for root, _dirs, files in os.walk(folder_path, followlinks=False):
                 for file in files:
                     all_files.append(os.path.join(root, file))
             

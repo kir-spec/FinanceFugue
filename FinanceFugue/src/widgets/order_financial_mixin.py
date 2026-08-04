@@ -1,4 +1,5 @@
 """Финансы и платежи для карточки заказа."""
+import math
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -39,78 +40,73 @@ class OrderFinancialMixin:
     def sync_price(self):
         try:
             text = self.cost_edit.text()
-            # Заменяем запятую на точку и удаляем пробелы
             text = text.replace(',', '.').replace(' ', '')
             if not text:
                 new_price = 0.0
             else:
                 new_price = float(text)
-            
+
+            if not math.isfinite(new_price):
+                QMessageBox.warning(
+                    self._bridge.window, "Ошибка",
+                    "Введите конечное числовое значение",
+                )
+                self.cost_edit.setText(self.format_number(self.order.price))
+                return
+
             if new_price < 0:
                 QMessageBox.warning(self._bridge.window, "Ошибка", "Стоимость не может быть отрицательной")
                 self.cost_edit.setText(self.format_number(self.order.price))
                 return
-            
+
             if new_price < self.order.total_received:
                 msg_box = QMessageBox(self._bridge.window)
                 msg_box.setWindowTitle("Изменение стоимости")
                 msg_box.setText(f"Новая стоимость ({new_price:.2f} {self._currency_sym()}) меньше уже полученной суммы ({self.order.total_received:.2f} {self._currency_sym()}).")
                 msg_box.setInformativeText(f"Это приведет к необходимости вернуть {self.order.total_received - new_price:.2f} {self._currency_sym()}\nПродолжить?")
                 msg_box.setIcon(QMessageBox.Icon.Question)
-                
+
                 btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
                 btn_no = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
-                
+
                 msg_box.exec()
-                
-                if msg_box.clickedButton() == btn_yes:
-                    # Рассчитываем разницу для возврата
-                    diff = self.order.total_received - new_price
-                    # Создаем возврат
-                    self.order.add_payment(-diff, "корректировка", "Возврат из-за уменьшения стоимости заказа")
-                    self.order.price = new_price
-                    
-                    # Обновляем аванс, если он теперь больше цены
-                    if self.order.advance > new_price:
-                        self.order.advance = new_price
-                        self.advance_edit.setText(self.format_number(new_price))
-                else:
+
+                if msg_box.clickedButton() != btn_yes:
                     self.cost_edit.setText(self.format_number(self.order.price))
                     return
-            
+                diff = self.order.total_received - new_price
+                self.order.add_payment(-diff, "корректировка", "Возврат из-за уменьшения стоимости заказа")
+                self.order.price = new_price
+                if self.order.advance > new_price:
+                    self.order.advance = new_price
+                    self.advance_edit.setText(self.format_number(new_price))
+
             elif new_price < self.order.advance:
-                # Новая стоимость меньше аванса
                 diff = self.order.advance - new_price
                 msg_box = QMessageBox(self._bridge.window)
                 msg_box.setWindowTitle("Изменение стоимости")
                 msg_box.setText(f"Новая стоимость ({new_price:.2f} {self._currency_sym()}) меньше аванса ({self.order.advance:.2f} {self._currency_sym()}).")
                 msg_box.setInformativeText(f"Это приведет к возврату части аванса в размере {diff:.2f} {self._currency_sym()}\nПродолжить?")
                 msg_box.setIcon(QMessageBox.Icon.Question)
-                
+
                 btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
                 btn_no = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
-                
+
                 msg_box.exec()
-                
-                if msg_box.clickedButton() == btn_yes:
-                    # Сначала меняем цену, затем добавляем возврат,
-                    # чтобы add_payment не откатил self.order.advance обратно
-                    # через max(advance, total_advance_received).
-                    self.order.price = new_price
-                    self.order.add_payment(-diff, "аванс", "Возврат части аванса из-за уменьшения стоимости")
-                    self.order.advance = new_price
-                    self.advance_edit.setText(self.format_number(new_price))
-                else:
+
+                if msg_box.clickedButton() != btn_yes:
                     self.cost_edit.setText(self.format_number(self.order.price))
                     return
-            else:
-                # Обычное изменение цены
                 self.order.price = new_price
-            
+                self.order.add_payment(-diff, "аванс", "Возврат части аванса из-за уменьшения стоимости")
+                self.order.advance = new_price
+                self.advance_edit.setText(self.format_number(new_price))
+            else:
+                self.order.price = new_price
+
             self.update_financial_display()
             self._bridge.request_save()
         except ValueError:
-            # Если введено не число, оставляем старое значение
             self.cost_edit.setText(self.format_number(self.order.price))
 
     def sync_advance(self):

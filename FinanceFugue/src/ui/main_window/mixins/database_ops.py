@@ -56,8 +56,11 @@ class DatabaseOpsMixin:
 
     def import_dropped_client_folder(self, folder_path: str):
         """Импорт одной папки клиента, перетащенной на список."""
-        client_name = os.path.basename(folder_path.rstrip("\\/"))
-        existing = next((c for c in self.clients if c.name.lower() == client_name.lower()), None)
+        client_name = os.path.basename(folder_path.rstrip("\\/")).strip()
+        existing = next(
+            (c for c in self.clients if c.name.strip().lower() == client_name.lower()),
+            None,
+        )
         if existing:
             answer = QMessageBox.question(
                 self,

@@ -140,21 +140,42 @@ class FileManagerDialog(QDialog):
         if not order:
             return False
 
+        from ..utils.path_safety import safe_resolve_within
+
+        db_folder = os.path.dirname(self._window.storage.path) or os.getcwd()
+        allowed_root = os.path.join(db_folder, "attached_files")
+        existing_paths = {f.path for f in order.files}
+
         added = 0
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if not path or not os.path.exists(path):
                 continue
+            # Не позволяем drop произвольных путей, если они уходят
+            # за пределы attached_files — отказ вместо молчаливого
+            # сохранения ссылки на C:\Windows\System32.
+            safe = safe_resolve_within(path, allowed_root)
+            if safe is None:
+                QMessageBox.warning(
+                    self, APP_NAME,
+                    f"Путь вне папки базы данных:\n{path}\n\n"
+                    f"Допустимо: {allowed_root}",
+                )
+                continue
             if os.path.isfile(path):
-                if not any(f.path == path for f in order.files):
+                if path not in existing_paths:
                     order.files.append(ProjectFile(path=path, name=os.path.basename(path)))
+                    existing_paths.add(path)
                     added += 1
             elif os.path.isdir(path):
-                for root, _dirs, files in os.walk(path):
+                for root, _dirs, files in os.walk(path, followlinks=False):
                     for name in files:
                         file_path = os.path.join(root, name)
-                        if not any(f.path == file_path for f in order.files):
+                        if safe_resolve_within(file_path, allowed_root) is None:
+                            continue
+                        if file_path not in existing_paths:
                             order.files.append(ProjectFile(path=file_path, name=name))
+                            existing_paths.add(file_path)
                             added += 1
 
         if not added:

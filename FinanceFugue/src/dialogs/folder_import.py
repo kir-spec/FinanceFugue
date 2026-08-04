@@ -126,41 +126,46 @@ class FolderImportDialog(QDialog):
                 f"Не удалось прочитать папку:\n{folder}\n\n{e}",
             )
             return
-        subfolders = [d for d in root_items if os.path.isdir(d)]     
-        
-        # Предполагаем, что выбрана корневая папка, содержащая КЛИЕНТОВ.
-        # Проходимся по каждой папке (Клиенту)
+        subfolders = [d for d in root_items if os.path.isdir(d)]
+
+        # Проходимся по каждой папке (Клиенту).
+        # Каждый os.listdir обёрнут в try/except OSError,
+        # иначе одна защищённая папка ломает весь импорт.
         for client_path in subfolders:
             client_name = os.path.basename(client_path)
-            
-            # Внутри папки Клиента ищем папки Заказов
-            client_items = [os.path.join(client_path, item) for item in os.listdir(client_path)]
+
+            try:
+                client_items = [
+                    os.path.join(client_path, item)
+                    for item in os.listdir(client_path)
+                ]
+            except OSError as e:
+                logger.warning("Не удалось прочитать папку клиента %s: %s", client_path, e)
+                self.preview_list.addItem(f"⚠ Пропуск: {client_name} ({e})")
+                continue
+
             order_folders = [d for d in client_items if os.path.isdir(d)]
-            
+
             for order_path in order_folders:
                 order_name = os.path.basename(order_path)
-                
-                # Важное ограничение: Внутри "Папки Заказа" учитывай только первый уровень вложенности.
-                # Не нужно заходить внутрь папок "Действие 1" и т.д.
-                # Собираем все элементы (папки и файлы) внутри папки заказа
-                
+
                 order_content = []
                 try:
                     for item in os.listdir(order_path):
                         item_path = os.path.join(order_path, item)
-                        # Сохраняем имя и полный путь
                         order_content.append((item, item_path))
-                except Exception as e:
-                    logger.error(f"Ошибка чтения папки {order_path}: {e}")
+                except OSError as e:
+                    logger.warning(
+                        "Не удалось прочитать папку заказа %s: %s", order_path, e
+                    )
                     continue
-                
+
                 if order_content:
                     self.scan_results.append({
                         'client_name': client_name,
                         'order_name': order_name,
-                        'files': order_content # Теперь здесь и файлы и папки
+                        'files': order_content,
                     })
-                    
                     count = len(order_content)
                     self.preview_list.addItem(f"Клиент: {client_name} -> Заказ: {order_name} (Обнаружено элементов: {count})")
 

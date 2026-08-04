@@ -33,6 +33,7 @@ from ....theme import (
     create_dark_palette,
     status_bar_message,
 )
+from PySide6.QtCore import QTimer
 from ....ui.client_list_widget import ClientListWidget
 from ....ui.dashboard import create_stat_widget
 from ....ui.icon_loader import load_app_icon
@@ -83,7 +84,14 @@ class ShellMixin:
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Поиск...")
         self.search_edit.setClearButtonEnabled(True)
-        self.search_edit.textChanged.connect(self.refresh_list)
+        # Дебаунс 200мс: refresh_list не вызывается на каждом символе.
+        self._search_debounce = QTimer(self)
+        self._search_debounce.setSingleShot(True)
+        self._search_debounce.setInterval(200)
+        self._search_debounce.timeout.connect(self.refresh_list)
+        self.search_edit.textChanged.connect(
+            lambda _text: self._search_debounce.start()
+        )
         self.search_edit.setStyleSheet(SEARCH_FIELD_STYLE)
         left_layout.addWidget(self.search_edit)
 
@@ -206,10 +214,31 @@ class ShellMixin:
         alerts = collect_deadline_alerts(self.clients)
         if not alerts:
             return
-        message = "Приближающиеся или просроченные дедлайны:\n\n" + format_alerts_message(
-            alerts
-        )
         if popup:
+            # Дедуп: если набор тех же заказов уже показывали —
+            # не спамим. Ack-ключи в settings: deadline_alerts_acked (frozenset).
+            acked: set[str] = set(
+                self.app_settings.get("deadline_alerts_acked", [])
+            )
+            current_keys = {
+                f"{a.client_name}|{a.order_name}|{a.deadline}"
+                for a in alerts
+            }
+            new_keys = current_keys - acked
+            if not new_keys:
+                return
+            self.app_settings["deadline_alerts_acked"] = sorted(current_keys)
+            try:
+                self.save_settings()
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Не удалось сохранить deadline ack: %s", e)
+            new_alerts = [
+                a for a in alerts
+                if f"{a.client_name}|{a.order_name}|{a.deadline}" in new_keys
+            ]
+            message = "Приближающиеся или просроченные дедлайны:\n\n" + format_alerts_message(
+                new_alerts
+            )
             QMessageBox.information(self, f"{APP_NAME} — сроки заказов", message)
         else:
             self.statusBar().showMessage(
@@ -238,6 +267,10 @@ class ShellMixin:
                 f"Не удалось сохранить базу данных при выходе:\n{e}",
             )
         self.backup_settings()
+        if hasattr(self, "_deadline_timer"):
+            self._deadline_timer.stop()
+        if hasattr(self, "_search_debounce"):
+            self._search_debounce.stop()
         if hasattr(self, "_instance_lock"):
             self._instance_lock.release()
         event.accept()

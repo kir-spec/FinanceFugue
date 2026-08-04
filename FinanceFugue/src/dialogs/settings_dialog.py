@@ -169,73 +169,93 @@ class SettingsDialog(QDialog):
             return
             
         move_files = (clicked_button == btn_move)
-        
+
         try:
-            # Создаем путь к новой базе
             new_db_path = Path(folder) / "pro_database.json"
-            
-            # Проверяем, не выбрана ли та же самая папка
-            if self._window.storage.path.exists() and new_db_path.resolve() == self._window.storage.path.resolve():
-                QMessageBox.information(self, "Информация", "База данных уже находится в выбранной папке.")
+
+            if (
+                self._window.storage.path.exists()
+                and new_db_path.resolve() == self._window.storage.path.resolve()
+            ):
+                QMessageBox.information(
+                    self, "Информация", "База данных уже находится в выбранной папке."
+                )
                 return
 
-            # Сохраняем текущую базу перед переносом
             self._window.save_db()
-            
+
             if move_files:
-                # Создаем структуру папок для файлов
                 files_folder = Path(folder) / "attached_files"
                 files_folder.mkdir(exist_ok=True)
-                
-                # Копируем файлы
+
+                # Сначала копируем ВСЕ файлы во временный план,
+                # и только при полном успехе обновляем пути.
+                # Иначе при падении на середине мы получим смесь
+                # старых и новых путей и inconsistent БД.
+                new_paths = []
                 for client in self._window.clients:
                     for order in client.orders:
-                        # Мы должны обновить пути в объектах файлов
-                        # При этом мы не удаляем старые файлы (как просил пользователь)
-                        # Мы просто копируем их в новое место и обновляем ссылки
+                        order_folder = files_folder / order.id
+                        order_folder.mkdir(exist_ok=True)
                         for file in order.files:
-                            if os.path.exists(file.path):
-                                # Создаем папку для заказа
-                                order_folder = files_folder / order.id
-                                order_folder.mkdir(exist_ok=True)
-                                
-                                new_file_path = order_folder / file.name
+                            if not os.path.exists(file.path):
+                                new_paths.append(None)
+                                continue
+
+                            new_file_path = order_folder / file.name
+                            try:
                                 if os.path.isdir(file.path):
+                                    new_file_path = order_folder / file.name
                                     shutil.copytree(
                                         file.path,
                                         new_file_path,
                                         dirs_exist_ok=True,
                                     )
-                                    file.is_folder = True
                                 else:
                                     shutil.copy2(file.path, new_file_path)
-                                file.path = str(new_file_path)
-            
-            # Копируем саму базу данных, если она существует
+                                new_paths.append(str(new_file_path))
+                            except Exception as copy_err:
+                                logger.error(
+                                    "Ошибка копирования %s → %s: %s",
+                                    file.path, new_file_path, copy_err,
+                                )
+                                raise
+
+                # Только после успешного копирования — мутируем.
+                idx = 0
+                for client in self._window.clients:
+                    for order in client.orders:
+                        for file in order.files:
+                            new_path = new_paths[idx]
+                            idx += 1
+                            if new_path is not None:
+                                file.path = new_path
+
             if self._window.storage.path.exists():
                 shutil.copy2(self._window.storage.path, new_db_path)
-            
+
             self._window.app_settings['database_path'] = folder
             self._window.rebind_storage(folder, reload_clients=False)
-            
-            # Сохраняем обновленную базу данных (уже с новыми путями) по новому адресу
+
             self._window.save_db()
             self._window.save_settings()
-            
+
             QMessageBox.information(
                 self,
                 "Успех",
                 f"База данных успешно перенесена в:\n{folder}\n\n"
                 f"{'Файлы были скопированы в новую базу данных и привязаны к новому месту' if move_files else 'Файлы остались на старых местах'}"
             )
-            
+
         except Exception as e:
             logger.error(f"Ошибка переноса базы данных: {e}", exc_info=True)
             QMessageBox.critical(self, "Ошибка", f"Не удалось перенести базу данных: {e}")
 
     def restore_settings_dialog(self):
         """Диалог восстановления настроек из бэкапа"""
-        backup_dir = "settings_backups"
+        from ..utils.paths import user_data_path
+
+        backup_dir = str(user_data_path() / "settings_backups")
         if not os.path.exists(backup_dir):
             QMessageBox.information(self, "Инфо", "Папка с резервными копиями пуста.")
             return
@@ -248,16 +268,18 @@ class SettingsDialog(QDialog):
         items = [os.path.basename(b) for b in backups]
         item, ok = QInputDialog.getItem(self, "Восстановление настроек",
                                       "Выберите файл резервной копии:", items, 0, False)
-        
+
         if ok and item:
             selected_backup = os.path.join(backup_dir, item)
             try:
                 with open(selected_backup, "r", encoding="utf-8") as f:
                     new_settings = json.load(f)
-                
+
+                # РебindInstanceLock до перезаписи, чтобы два
+                # приложения не делили одну базу.
                 self._window.app_settings = new_settings
                 self._window.save_settings()
-                
+
                 QMessageBox.information(self, "Успех",
                                       "Настройки восстановлены. Перезапустите приложение для применения изменений.")
             except Exception as e:

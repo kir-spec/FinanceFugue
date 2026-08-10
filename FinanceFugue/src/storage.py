@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, List
 
 from .models import Client, Order, Payment, ProjectFile
+from .services.crypto import DatabaseCrypto, InvalidPasswordError
 from .services.schema import SCHEMA_VERSION
 
 logger = logging.getLogger("Storage")
@@ -87,6 +88,7 @@ def _parse_clients_list(data: list) -> List[Client]:
                 avatar_path=c_dict.get("avatar_path", ""),
                 is_deleted=c_dict.get("is_deleted", False),
                 notes=c_dict.get("notes", ""),
+                requisites=c_dict.get("requisites", ""),
                 orders=orders,
             )
         )
@@ -113,15 +115,40 @@ def _extract_clients_payload(data: Any) -> list:
 class CRMStorage:
     def __init__(self, filename="pro_database.json"):
         self.path = Path(filename)
+        self.password: str = ""
+        self._is_encrypted = False
+
+    def check_is_encrypted(self) -> bool:
+        if not self.path.exists():
+            return False
+        # Проверяем, зашифрован ли файл (начинается не с '{' или '[')
+        with open(self.path, "rb") as f:
+            chunk = f.read(1)
+            if not chunk:
+                return False
+            # Если первый байт не '{' и не '['
+            return chunk not in b'{['
 
     def load(self) -> List[Client]:
         if not self.path.exists():
             return []
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            self._is_encrypted = self.check_is_encrypted()
+            
+            if self._is_encrypted:
+                if not self.password:
+                    raise InvalidPasswordError("База зашифрована, требуется пароль")
+                with open(self.path, "rb") as f:
+                    file_bytes = f.read()
+                data = DatabaseCrypto.decrypt_data(file_bytes, self.password)
+            else:
+                with open(self.path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    
             payload = _extract_clients_payload(data)
             return _parse_clients_list(payload)
+        except InvalidPasswordError as e:
+            raise e
         except Exception as e:
             logger.error("Ошибка загрузки базы данных %s: %s", self.path, e, exc_info=True)
             raise DatabaseLoadError(str(e)) from e
@@ -156,13 +183,22 @@ class CRMStorage:
                     "avatar_path": c.avatar_path,
                     "is_deleted": c.is_deleted,
                     "notes": c.notes,
+                    "requisites": c.requisites,
                     "orders": orders_data,
                 }
                 clients_data.append(c_dict)
 
             envelope = {"schema_version": SCHEMA_VERSION, "clients": clients_data}
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(envelope, f, ensure_ascii=False, indent=4)
+            
+            if self.password:
+                # Если установлен пароль, шифруем перед сохранением
+                encrypted_bytes = DatabaseCrypto.encrypt_data(envelope, self.password)
+                with open(temp_path, "wb") as f:
+                    f.write(encrypted_bytes)
+            else:
+                # Открытый JSON (legacy)
+                with open(temp_path, "w", encoding="utf-8") as f_json:
+                    json.dump(envelope, f_json, ensure_ascii=False, indent=4)
 
             os.replace(temp_path, self.path)
         except Exception as e:

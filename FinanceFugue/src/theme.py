@@ -4,37 +4,67 @@
 вызывают setStyleSheet(CONSTANT) или setObjectName() для вариантов кнопок.
 """
 from PySide6.QtGui import QPalette, QColor
+from .services.settings import load_settings
+
+# --- Читаем настройки ---
+try:
+    _settings = load_settings()
+    _is_light = _settings.get("theme", "dark") == "light"
+except Exception:
+    _is_light = False
 
 # --- Палитра ---
-COLOR_BG = "#1E1E1E"
-COLOR_BG_PANEL = "#252525"
-COLOR_BG_INPUT = "#333333"
-COLOR_BORDER = "#3D3D3D"
-COLOR_TEXT = "#FFFFFF"
-COLOR_TEXT_MUTED = "#DDDDDD"
-COLOR_TEXT_DIM = "#AAAAAA"
-COLOR_ACCENT = "#00D1FF"
-COLOR_SUCCESS = "#28A745"
-COLOR_DANGER = "#DC3545"
-COLOR_DANGER_HOVER = "#C82333"
-COLOR_PRIMARY = "#0078D7"
+if _is_light:
+    COLOR_BG = "#F5F5F5"
+    COLOR_BG_PANEL = "#FFFFFF"
+    COLOR_BG_INPUT = "#FFFFFF"
+    COLOR_BORDER = "#E0E0E0"
+    COLOR_TEXT = "#333333"
+    COLOR_TEXT_MUTED = "#666666"
+    COLOR_TEXT_DIM = "#999999"
+    COLOR_ACCENT = "#00A8CC"
+    COLOR_SUCCESS = "#28A745"
+    COLOR_DANGER = "#DC3545"
+    COLOR_DANGER_HOVER = "#C82333"
+    COLOR_PRIMARY = "#0078D7"
+    
+    _BTN_BG = "#E0E0E0"
+    _BTN_HOVER = "#D0D0D0"
+    _BTN_PRESSED = "#C0C0C0"
+else:
+    COLOR_BG = "#1E1E1E"
+    COLOR_BG_PANEL = "#252525"
+    COLOR_BG_INPUT = "#333333"
+    COLOR_BORDER = "#3D3D3D"
+    COLOR_TEXT = "#FFFFFF"
+    COLOR_TEXT_MUTED = "#DDDDDD"
+    COLOR_TEXT_DIM = "#AAAAAA"
+    COLOR_ACCENT = "#00D1FF"
+    COLOR_SUCCESS = "#28A745"
+    COLOR_DANGER = "#DC3545"
+    COLOR_DANGER_HOVER = "#C82333"
+    COLOR_PRIMARY = "#0078D7"
+    
+    _BTN_BG = "#2D2D2D"
+    _BTN_HOVER = "#3D3D3D"
+    _BTN_PRESSED = "#4D4D4D"
 
 # --- Базовые блоки (собираются в полные таблицы стилей) ---
-_BTN_BASE = """
-    QPushButton {
-        background-color: #2D2D2D; color: #FFFFFF;
-        border: 1px solid #3D3D3D; border-radius: 4px;
-    }
-    QPushButton:hover { background-color: #3D3D3D; }
-    QPushButton:pressed { background-color: #4D4D4D; }
+_BTN_BASE = f"""
+    QPushButton {{
+        background-color: {_BTN_BG}; color: {COLOR_TEXT};
+        border: 1px solid {COLOR_BORDER}; border-radius: 4px;
+    }}
+    QPushButton:hover {{ background-color: {_BTN_HOVER}; }}
+    QPushButton:pressed {{ background-color: {_BTN_PRESSED}; }}
 """
-_BTN_COMPACT = """
-    QPushButton {
-        background-color: #2D2D2D; color: #FFFFFF;
-        border: 1px solid #3D3D3D; padding: 4px;
+_BTN_COMPACT = f"""
+    QPushButton {{
+        background-color: {_BTN_BG}; color: {COLOR_TEXT};
+        border: 1px solid {COLOR_BORDER}; padding: 4px;
         border-radius: 3px; font-size: 10pt;
-    }
-    QPushButton:hover { background-color: #3D3D3D; }
+    }}
+    QPushButton:hover {{ background-color: {_BTN_HOVER}; }}
 """
 _BTN_DANGER_COMPACT = """
     QPushButton {
@@ -50,37 +80,37 @@ _BTN_DANGER_COMPACT = """
         background-color: #138496;
     }
 """
-_INPUT_BASE = """
-    QLineEdit, QTextEdit, QComboBox {
-        background-color: #333333; color: #FFFFFF;
-        border: 1px solid #444444; padding: 6px; border-radius: 3px; font-size: 11pt;
-    }
+_INPUT_BASE = f"""
+    QLineEdit, QTextEdit, QComboBox {{
+        background-color: {COLOR_BG_INPUT}; color: {COLOR_TEXT};
+        border: 1px solid {COLOR_BORDER}; padding: 6px; border-radius: 3px; font-size: 11pt;
+    }}
 """
-_CHECKBOX = """
-    QCheckBox { color: #DDDDDD; font-size: 11pt; padding: 3px; }
-    QCheckBox::indicator {
+_CHECKBOX = f"""
+    QCheckBox {{ color: {COLOR_TEXT}; font-size: 11pt; padding: 3px; }}
+    QCheckBox::indicator {{
         width: 16px; height: 16px;
-        border: 2px solid #555555; background: #222222; border-radius: 3px;
-    }
-    QCheckBox::indicator:checked { border: 2px solid #00D1FF; background: #00D1FF; }
+        border: 2px solid {COLOR_BORDER}; background: {COLOR_BG_INPUT}; border-radius: 3px;
+    }}
+    QCheckBox::indicator:checked {{ border: 2px solid {COLOR_ACCENT}; background: {COLOR_ACCENT}; }}
 """
-_GROUPBOX = """
-    QGroupBox {
-        color: #FFFFFF; border: 1px solid #3D3D3D; border-radius: 5px;
+_GROUPBOX = f"""
+    QGroupBox {{
+        color: {COLOR_TEXT}; border: 1px solid {COLOR_BORDER}; border-radius: 5px;
         margin-top: 10px; font-size: 13pt; font-weight: bold; padding-top: 15px;
-    }
-    QGroupBox::title {
+    }}
+    QGroupBox::title {{
         subcontrol-origin: margin; subcontrol-position: top center;
-        padding: 0 5px; color: #00D1FF;
-    }
-    QGroupBox#DatabaseGroup { background-color: #1F2630; border-color: #30363D; }
-    QGroupBox#SettingsGroup { background-color: #2A2A2A; border-color: #3D3D3D; }
+        padding: 0 5px; color: {COLOR_ACCENT};
+    }}
+    QGroupBox#DatabaseGroup {{ background-color: {COLOR_BG_PANEL}; border-color: {COLOR_BORDER}; }}
+    QGroupBox#SettingsGroup {{ background-color: {COLOR_BG_PANEL}; border-color: {COLOR_BORDER}; }}
 """
-_LISTWIDGET = """
-    QListWidget {
-        background-color: #252525; color: #FFFFFF;
-        border: 1px solid #3D3D3D; font-size: 11pt;
-    }
+_LISTWIDGET = f"""
+    QListWidget {{
+        background-color: {COLOR_BG_PANEL}; color: {COLOR_TEXT};
+        border: 1px solid {COLOR_BORDER}; font-size: 11pt;
+    }}
 """
 
 DIALOG_STYLESHEET = f"""
@@ -91,10 +121,10 @@ DIALOG_STYLESHEET = f"""
         border: 1px solid {COLOR_BORDER}; border-radius: 4px; font-size: 11pt;
     }}
     QPushButton {{
-        background-color: #2D2D2D; color: {COLOR_TEXT};
+        background-color: {_BTN_BG}; color: {COLOR_TEXT};
         border: 1px solid {COLOR_BORDER}; padding: 8px 16px; border-radius: 4px;
     }}
-    QPushButton:hover {{ background-color: #3D3D3D; }}
+    QPushButton:hover {{ background-color: {_BTN_HOVER}; }}
     QCheckBox {{ color: {COLOR_TEXT}; font-size: 11pt; }}
     {_INPUT_BASE}
     {_CHECKBOX}
@@ -128,20 +158,20 @@ FIRST_RUN_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
     QPushButton { padding: 10px 20px; font-size: 13pt; }
 """
 
-FILE_MANAGER_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
-    QTreeWidget {
-        background-color: #252525; color: #FFFFFF;
-        border: 1px solid #3D3D3D; font-size: 11pt;
-    }
+FILE_MANAGER_DIALOG_STYLESHEET = DIALOG_STYLESHEET + f"""
+    QTreeWidget {{
+        background-color: {COLOR_BG_PANEL}; color: {COLOR_TEXT};
+        border: 1px solid {COLOR_BORDER}; font-size: 11pt;
+    }}
 """
 
-ABOUT_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
-    QTabWidget::pane { border: 1px solid #3D3D3D; background: #252525; }
-    QTabBar::tab {
-        background: #2D2D2D; color: #DDDDDD; padding: 8px 14px;
-        border: 1px solid #3D3D3D; margin-right: 2px;
-    }
-    QTabBar::tab:selected { background: #3D3D3D; color: #00D1FF; }
+ABOUT_DIALOG_STYLESHEET = DIALOG_STYLESHEET + f"""
+    QTabWidget::pane {{ border: 1px solid {COLOR_BORDER}; background: {COLOR_BG_PANEL}; }}
+    QTabBar::tab {{
+        background: {_BTN_BG}; color: {COLOR_TEXT_MUTED}; padding: 8px 14px;
+        border: 1px solid {COLOR_BORDER}; margin-right: 2px;
+    }}
+    QTabBar::tab:selected {{ background: {_BTN_HOVER}; color: {COLOR_ACCENT}; }}
 """
 
 EULA_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """

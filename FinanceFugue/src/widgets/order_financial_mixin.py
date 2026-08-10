@@ -401,3 +401,42 @@ class OrderFinancialMixin:
             # Перерисовываем профиль
             self._bridge.request_profile_refresh()
             self._bridge.request_save()
+
+    def generate_pdf_invoice(self):
+        """Генерирует PDF-счёт для текущего заказа и открывает его."""
+        import os
+        from ..services.invoice import generate_invoice
+
+        # Находим клиента-владельца заказа
+        client = next(
+            (c for c in self._bridge.clients if self.order in c.orders), None
+        )
+        if not client:
+            QMessageBox.warning(self, "Ошибка", "Не удалось определить клиента для этого заказа.")
+            return
+
+        # Выходная папка — рядом с базой данных
+        output_dir = str(self._bridge.window.storage.path.parent / "invoices")
+
+        # Реквизиты исполнителя из глобальных настроек
+        app_settings = self._bridge.window.app_settings
+        seller_name = app_settings.get("seller_name", "") or "FinanceFugue CRM"
+        seller_requisites = app_settings.get("seller_requisites", "")
+
+        try:
+            pdf_path = generate_invoice(
+                client, self.order, output_dir,
+                seller_name=seller_name,
+                seller_requisites=seller_requisites,
+            )
+            QMessageBox.information(
+                self,
+                "PDF-счёт создан",
+                f"Счёт успешно сгенерирован:\n{pdf_path}",
+            )
+            # Открываем PDF системным просмотрщиком
+            os.startfile(pdf_path)
+        except Exception as e:
+            logger.error("Ошибка генерации PDF: %s", e, exc_info=True)
+            QMessageBox.critical(self, "Ошибка", f"Не удалось создать PDF-счёт:\n{e}")
+

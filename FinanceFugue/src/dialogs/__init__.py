@@ -10,6 +10,8 @@ from .file_manager import FileManagerDialog
 from .archive_viewer import ArchiveViewerDialog
 from .recycle_bin_dialog import RecycleBinDialog
 from .recycle_bin_orders import RecycleBinOrdersDialog
+from .analytics_dialog import AnalyticsDialog
+from .cloud_settings import CloudSettingsDialog
 
 __all__ = [
     "PaymentsDialog",
@@ -24,4 +26,6 @@ __all__ = [
     "ArchiveViewerDialog",
     "RecycleBinDialog",
     "RecycleBinOrdersDialog",
+    "AnalyticsDialog",
+    "CloudSettingsDialog",
 ]

@@ -283,7 +283,11 @@ class OrderWidget(OrderFinancialMixin, OrderFilesMixin, QFrame):
         
         btns_row.addWidget(add_payment_btn)
         btns_row.addWidget(history_payment_btn)
-        # btns_row.addStretch() # Убрали stretch, чтобы рамка сжималась
+        
+        invoice_btn = QPushButton("📄 PDF-счёт")
+        invoice_btn.clicked.connect(self.generate_pdf_invoice)
+        invoice_btn.setStyleSheet(PAYMENT_HISTORY_BTN_STYLE)
+        btns_row.addWidget(invoice_btn)
         
         # Статус оплаты
         self.payment_status = QLabel()

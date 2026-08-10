@@ -241,6 +241,7 @@ class ClientProfileMixin:
             self.current_client.email = dialog.email_edit.text()
             self.current_client.social_link = dialog.link_edit.text()
             self.current_client.notes = dialog.notes_edit.toPlainText()
+            self.current_client.requisites = dialog.requisites_edit.toPlainText()
             self.save_db()
             self.render_client_profile()
             self.refresh_list()

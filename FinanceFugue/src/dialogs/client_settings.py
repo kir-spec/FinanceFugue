@@ -41,6 +41,13 @@ class ClientSettingsDialog(QDialog):
         self.notes_edit.setMaximumHeight(80)
         form.addRow("Заметка:", self.notes_edit)
 
+        self.requisites_edit = QTextEdit(client.requisites)
+        self.requisites_edit.setMaximumHeight(100)
+        self.requisites_edit.setPlaceholderText(
+            "ИП Иванов И.И.\nИНН 1234567890\nР/с 40802810...\nБанк: ..."
+        )
+        form.addRow("Реквизиты:", self.requisites_edit)
+
         layout.addLayout(form)
 
         export_group = QGroupBox("Инструменты экспорта")

@@ -54,6 +54,7 @@ class DatabaseOpsMixin:
             self.storage.save(self.clients)
             self.update_dash()
             self._set_save_status("Сохранено")
+            self.trigger_sync()
         except Exception as e:
             logger.error("Ошибка сохранения базы данных: %s", e, exc_info=True)
             self._set_save_status(f"Ошибка сохранения: {e}", error=True)
@@ -99,6 +100,44 @@ class DatabaseOpsMixin:
             f"Новых клиентов: {imported_count}\n"
             f"Создано заказов: {order_count}",
         )
+
+    def get_selected_client(self):
+        """Возвращает клиента, выбранного в списке."""
+        return self.current_client
+
+    def trigger_sync(self, force=False):
+        """Запускает фоновую синхронизацию."""
+        import time
+        from ....services.cloud_sync import CloudSyncWorker
+
+        provider = self.app_settings.get("cloud_provider", "none")
+        if provider == "none":
+            return
+
+        # Защита от слишком частых бэкапов (раз в 5 минут, если не force)
+        current_time = time.time()
+        last_sync = getattr(self, "_last_cloud_sync", 0)
+        
+        if not force and (current_time - last_sync) < 300:
+            return
+            
+        # Не запускаем, если уже крутится воркер
+        if hasattr(self, "cloud_worker") and self.cloud_worker.isRunning():
+            return
+            
+        self.statusBar().showMessage("☁️ Синхронизация бэкапа...")
+        
+        self.cloud_worker = CloudSyncWorker(str(self.storage.path), self.app_settings)
+        self.cloud_worker.finished_sync.connect(self._on_sync_finished)
+        self.cloud_worker.start()
+
+    def _on_sync_finished(self, success, message):
+        import time
+        if success:
+            self._last_cloud_sync = time.time()
+            self.statusBar().showMessage(f"☁️ Бэкап: {message}", 10000)
+        else:
+            self.statusBar().showMessage(f"❌ Ошибка бэкапа: {message}", 10000)
 
     def import_from_folder(self):
         """Импорт клиентов из структуры папок"""

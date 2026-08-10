@@ -246,4 +246,5 @@ class Client:
     avatar_path: str = ""  # Относительный путь до аватарки
     is_deleted: bool = False  # Флаг корзины
     notes: str = ""
+    requisites: str = ""  # Банковские реквизиты клиента
     orders: List[Order] = field(default_factory=list)

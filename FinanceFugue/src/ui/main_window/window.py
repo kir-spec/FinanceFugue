@@ -1,7 +1,7 @@
 import os
 import sys
 
-from PySide6.QtWidgets import QMainWindow, QMessageBox
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog
 from PySide6.QtCore import QTimer
 
 from ... import APP_NAME, VERSION, EULA_VERSION
@@ -11,6 +11,7 @@ from ...ui.app_bridge import AppBridge
 from ...utils.instance_lock import InstanceLock, InstanceLockError
 from ...logger import get_logger
 from ...services.archive import ArchiveManager
+from ...dialogs.login_dialog import LoginDialog
 
 from .mixins import (
     StartupMixin,
@@ -71,6 +72,11 @@ class FinanceFugueWindow(
         except InstanceLockError as e:
             QMessageBox.critical(None, APP_NAME, str(e))
             sys.exit(1)
+            
+        login_dialog = LoginDialog(self.storage)
+        if login_dialog.exec() != QDialog.DialogCode.Accepted or not login_dialog.password_accepted:
+            sys.exit(0)
+            
         try:
             self.clients = self.storage.load()
         except DatabaseLoadError as e:

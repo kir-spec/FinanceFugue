@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QPushButton, QMessageBox, QFileDialog, QCheckBox, QGroupBox, QInputDialog,
+    QDialog, QVBoxLayout, QPushButton, QMessageBox, QFileDialog, QCheckBox,
+    QGroupBox, QInputDialog, QComboBox, QLabel, QLineEdit, QTextEdit
 )
 
 from ..logger import get_logger
@@ -89,8 +90,48 @@ class SettingsDialog(QDialog):
         )
         self.deadline_notify_cb.stateChanged.connect(self._save_deadline_pref)
         settings_layout.addWidget(self.deadline_notify_cb)
+        
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["🌙 Темная (по умолчанию)", "☀️ Светлая"])
+        if self._window.app_settings.get("theme", "dark") == "light":
+            self.theme_combo.setCurrentIndex(1)
+        self.theme_combo.currentIndexChanged.connect(self._save_theme_pref)
+        settings_layout.addWidget(QLabel("Тема оформления (требует перезапуска):"))
+        settings_layout.addWidget(self.theme_combo)
+        
+        btn_cloud_sync = QPushButton("☁️ Настройка облачных бэкапов")
+        btn_cloud_sync.clicked.connect(self._open_cloud_settings)
+        settings_layout.addWidget(btn_cloud_sync)
 
         layout.addWidget(settings_group)
+
+        # Группа реквизитов исполнителя (для PDF-счетов)
+        invoice_group = QGroupBox("Мои реквизиты (для PDF-счетов)")
+        invoice_group.setObjectName("SettingsGroup")
+        invoice_layout = QVBoxLayout(invoice_group)
+        invoice_layout.setSpacing(5)
+        invoice_layout.setContentsMargins(10, 10, 10, 10)
+
+        invoice_layout.addWidget(QLabel("Название компании / ФИО исполнителя:"))
+        self.seller_name_edit = QLineEdit(
+            self._window.app_settings.get("seller_name", "")
+        )
+        self.seller_name_edit.setPlaceholderText("ИП Иванов И.И. / ООО «Моя Компания»")
+        self.seller_name_edit.setMaxLength(200)
+        self.seller_name_edit.editingFinished.connect(self._save_invoice_prefs)
+        invoice_layout.addWidget(self.seller_name_edit)
+
+        invoice_layout.addWidget(QLabel("Банковские реквизиты:"))
+        self.seller_requisites_edit = QTextEdit(
+            self._window.app_settings.get("seller_requisites", "")
+        )
+        self.seller_requisites_edit.setMaximumHeight(100)
+        self.seller_requisites_edit.setPlaceholderText(
+            "ИНН 1234567890\nР/с 40802810...\nБанк: АО «Тинькофф Банк»\nБИК 044525974\nК/с 30101810145250000974"
+        )
+        invoice_layout.addWidget(self.seller_requisites_edit)
+
+        layout.addWidget(invoice_group)
 
         legal_group = QGroupBox("Правовая информация")
         legal_group.setObjectName("LegalGroup")
@@ -110,10 +151,29 @@ class SettingsDialog(QDialog):
         btn_close = QPushButton("Закрыть")
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
-    
+
+    def accept(self):
+        # Сохраняем реквизиты из QTextEdit перед закрытием
+        self._save_invoice_prefs()
+        super().accept()
+
+    def _save_theme_pref(self, index):
+        theme_val = "light" if index == 1 else "dark"
+        self._window.app_settings["theme"] = theme_val
+        self._window.save_settings()
+
+    def _save_invoice_prefs(self):
+        self._window.app_settings["seller_name"] = self.seller_name_edit.text()
+        self._window.app_settings["seller_requisites"] = self.seller_requisites_edit.toPlainText()
+        self._window.save_settings()
+
     def _save_deadline_pref(self):
         self._window.app_settings["deadline_notifications"] = self.deadline_notify_cb.isChecked()
         self._window.save_settings()
+
+    def _open_cloud_settings(self):
+        from .cloud_settings import CloudSettingsDialog
+        CloudSettingsDialog(self._window).exec()
 
     def _show_eula(self):
         if self._window.show_eula_dialog():

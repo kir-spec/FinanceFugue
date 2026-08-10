@@ -15,7 +15,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtCore import Qt, QTimer
 
 from .... import APP_NAME, VERSION
-from ....dialogs import AboutDialog, FileManagerDialog, SettingsDialog, RecycleBinDialog
+from ....dialogs import AboutDialog, FileManagerDialog, SettingsDialog, RecycleBinDialog, AnalyticsDialog
 from ....services.client_stats import calculate_global_dashboard
 from ....services.deadline_notifier import collect_deadline_alerts, format_alerts_message
 from ....theme import (
@@ -99,12 +99,17 @@ class ShellMixin:
         self.archive_btn.clicked.connect(self.open_archive)
         self.archive_btn.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
         
+        self.analytics_btn = QPushButton("📊 Аналитика")
+        self.analytics_btn.clicked.connect(self.open_analytics)
+        self.analytics_btn.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
+        
         self.recycle_bin_btn = QPushButton("🗑 Корзина")
         self.recycle_bin_btn.clicked.connect(self.open_recycle_bin)
         self.recycle_bin_btn.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
         
         sidebar_header.addWidget(clients_label)
         sidebar_header.addStretch()
+        sidebar_header.addWidget(self.analytics_btn)
         sidebar_header.addWidget(self.archive_btn)
         sidebar_header.addWidget(self.recycle_bin_btn)
         
@@ -251,8 +256,13 @@ class ShellMixin:
 
         webbrowser.open(help_path.as_uri())
 
+    def open_analytics(self):
+        AnalyticsDialog(self.bridge).exec()
+
     def open_settings(self):
-        SettingsDialog(self).exec()
+        if SettingsDialog(self).exec():
+            self.refresh_list()
+            self.render_client_profile()
 
     def check_deadline_notifications(self, *, popup: bool = True):
         if not self.app_settings.get("deadline_notifications", True):

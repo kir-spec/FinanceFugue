@@ -56,7 +56,7 @@ class TestAppBridge(unittest.TestCase):
     def test_remove_client(self):
         client = self.window.clients[0]
         self.bridge.remove_client(client)
-        self.assertEqual(self.window.clients, [])
+        self.assertTrue(client.is_deleted)
         self.assertTrue(self.window.cleared)
         self.assertTrue(self.saved)
 

@@ -67,7 +67,7 @@ class OrderFinancialMixin:
                 msg_box.setIcon(QMessageBox.Icon.Question)
 
                 btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
-                btn_no = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
+                msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
 
                 msg_box.exec()
 
@@ -90,7 +90,7 @@ class OrderFinancialMixin:
                 msg_box.setIcon(QMessageBox.Icon.Question)
 
                 btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
-                btn_no = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
+                msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
 
                 msg_box.exec()
 
@@ -147,7 +147,7 @@ class OrderFinancialMixin:
                     msg_box.setIcon(QMessageBox.Icon.Question)
                     
                     btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
-                    btn_no = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
+                    msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
                     
                     msg_box.exec()
                     
@@ -202,7 +202,7 @@ class OrderFinancialMixin:
                     msg_box.setIcon(QMessageBox.Icon.Question)
                     
                     btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
-                    btn_no = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
+                    msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
                     
                     msg_box.exec()
                     
@@ -308,6 +308,7 @@ class OrderFinancialMixin:
         # Сумма
         amount_label = QLabel("Сумма:")
         amount_edit = QLineEdit()
+        amount_edit.setMaxLength(20)
         # Разрешаем отрицательные значения для возвратов
         amount_validator = QDoubleValidator(-9999999, 9999999, 2)
         amount_edit.setValidator(amount_validator)
@@ -382,23 +383,20 @@ class OrderFinancialMixin:
             return
         
         msg_box = QMessageBox(self._bridge.window)
-        msg_box.setWindowTitle("Удаление заказа")
-        msg_box.setText(f"Вы уверены, что хотите удалить заказ '{self.order.service_type}'?")
+        msg_box.setWindowTitle("Отправка в корзину")
+        msg_box.setText(f"Отправить заказ '{self.order.service_type}' в корзину?")
+        msg_box.setInformativeText("Вы сможете восстановить его позже через Корзину заказов.")
         msg_box.setIcon(QMessageBox.Icon.Question)
         
-        btn_delete = msg_box.addButton("Удалить", QMessageBox.ButtonRole.YesRole)
+        btn_delete = msg_box.addButton("В корзину", QMessageBox.ButtonRole.YesRole)
         btn_cancel = msg_box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
         
         msg_box.exec()
         
         if msg_box.clickedButton() == btn_delete:
-            logger.info("Удаление заказа: %s (ID: %s)", self.order.service_type, self.order.id)
-
-            # Находим клиента, которому принадлежит заказ
-            for client in self._bridge.clients:
-                if self.order in client.orders:
-                    client.orders.remove(self.order)
-                    break
+            logger.info("Удаление заказа в корзину: %s (ID: %s)", self.order.service_type, self.order.id)
+            
+            self.order.is_deleted = True
             
             # Перерисовываем профиль
             self._bridge.request_profile_refresh()

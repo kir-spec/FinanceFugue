@@ -7,6 +7,9 @@ from .settings_dialog import SettingsDialog
 from .eula import EulaDialog
 from .about import AboutDialog
 from .file_manager import FileManagerDialog
+from .archive_viewer import ArchiveViewerDialog
+from .recycle_bin_dialog import RecycleBinDialog
+from .recycle_bin_orders import RecycleBinOrdersDialog
 
 __all__ = [
     "PaymentsDialog",
@@ -18,4 +21,7 @@ __all__ = [
     "EulaDialog",
     "AboutDialog",
     "FileManagerDialog",
+    "ArchiveViewerDialog",
+    "RecycleBinDialog",
+    "RecycleBinOrdersDialog",
 ]

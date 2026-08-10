@@ -26,12 +26,15 @@ class ClientSettingsDialog(QDialog):
         form = QFormLayout()
 
         self.name_edit = QLineEdit(client.name)
+        self.name_edit.setMaxLength(100)
         form.addRow("Имя:", self.name_edit)
 
         self.email_edit = QLineEdit(client.email)
+        self.email_edit.setMaxLength(100)
         form.addRow("Email:", self.email_edit)
 
         self.link_edit = QLineEdit(client.social_link)
+        self.link_edit.setMaxLength(250)
         form.addRow("Соц. сеть:", self.link_edit)
 
         self.notes_edit = QTextEdit(client.notes)
@@ -57,7 +60,12 @@ class ClientSettingsDialog(QDialog):
         export_layout.addWidget(export_orders_btn)
         layout.addWidget(export_group)
 
-        del_btn = QPushButton("🗑️ Удалить клиента")
+        archive_btn = QPushButton("🗄 Отправить клиента в архив")
+        archive_btn.setObjectName("archiveButton")
+        archive_btn.clicked.connect(self.archive_client)
+        layout.addWidget(archive_btn)
+
+        del_btn = QPushButton("🗑️ В корзину")
         del_btn.setObjectName("dangerButton")
         del_btn.clicked.connect(self.delete_client)
         layout.addWidget(del_btn)
@@ -69,12 +77,12 @@ class ClientSettingsDialog(QDialog):
 
     def delete_client(self):
         msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Подтверждение удаления")
-        msg_box.setText(f"Вы уверены, что хотите удалить клиента '{self.client.name}'?")
-        msg_box.setInformativeText("Все заказы и файлы клиента будут также удалены.")
-        msg_box.setIcon(QMessageBox.Icon.Warning)
+        msg_box.setWindowTitle("Отправка в корзину")
+        msg_box.setText(f"Отправить клиента '{self.client.name}' в корзину?")
+        msg_box.setInformativeText("Вы сможете восстановить его позже.")
+        msg_box.setIcon(QMessageBox.Icon.Question)
 
-        btn_delete = msg_box.addButton("Удалить клиента", QMessageBox.ButtonRole.YesRole)
+        btn_delete = msg_box.addButton("В корзину", QMessageBox.ButtonRole.YesRole)
         btn_cancel = msg_box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
 
         msg_box.exec()
@@ -82,4 +90,21 @@ class ClientSettingsDialog(QDialog):
         if msg_box.clickedButton() == btn_delete:
             logger.info("Удаление клиента: %s (ID: %s)", self.client.name, self.client.id)
             self._bridge.remove_client(self.client)
+            self.reject()
+
+    def archive_client(self):
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Архивация клиента")
+        msg_box.setText(f"Отправить клиента '{self.client.name}' со всеми заказами в архив?")
+        msg_box.setInformativeText("Клиент исчезнет из левого меню, но его финансы останутся в исторических отчетах.")
+        msg_box.setIcon(QMessageBox.Icon.Question)
+
+        btn_archive = msg_box.addButton("Архивировать", QMessageBox.ButtonRole.YesRole)
+        msg_box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
+
+        msg_box.exec()
+
+        if msg_box.clickedButton() == btn_archive:
+            logger.info("Архивация клиента: %s", self.client.name)
+            self._bridge.archive_client(self.client)
             self.reject()

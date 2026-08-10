@@ -15,8 +15,11 @@ from ....services.client_stats import calculate_client_stats
 from ....theme import (
     ADD_ORDER_BUTTON_STYLE,
     CLIENT_NAME_STYLE,
+    CLIENT_ARCHIVE_BTN_STYLE,
     NOTES_BUTTON_STYLE,
+    NOTES_CANCEL_BUTTON_STYLE,
     NOTES_EDIT_STYLE,
+    NOTES_SAVE_BUTTON_STYLE,
     NO_ORDERS_STYLE,
     ORDERS_SECTION_STYLE,
     SEPARATOR_STYLE,
@@ -24,6 +27,7 @@ from ....theme import (
 )
 from ....ui.dashboard import create_client_stats_widget
 from ....widgets import OrderWidget
+from ....widgets.avatar_widget import AvatarWidget
 
 
 class ClientProfileMixin:
@@ -81,13 +85,20 @@ class ClientProfileMixin:
         header_layout.setSpacing(5)
 
         name_row = QHBoxLayout()
+        name_row.setSpacing(15)
+        
+        # Avatar
+        self.avatar_widget = AvatarWidget(client, self.bridge, size=48)
+        self.avatar_widget.avatar_changed.connect(lambda p: self.save_db())
+        name_row.addWidget(self.avatar_widget)
+        
         name_label = QLabel(client.name.upper())
         name_label.setStyleSheet(CLIENT_NAME_STYLE)
         name_row.addWidget(name_label)
 
         notes_btn = QPushButton("✏️")
         notes_btn.setFixedSize(36, 36)
-        notes_btn.setToolTip("Заметки")
+        notes_btn.setToolTip("Редактировать комментарий к клиенту")
         notes_btn.clicked.connect(self.toggle_notes)
         notes_btn.setStyleSheet(NOTES_BUTTON_STYLE)
         name_row.addWidget(notes_btn)
@@ -99,19 +110,34 @@ class ClientProfileMixin:
         buttons_row.setContentsMargins(0, 0, 0, 0)
         buttons_row.setSpacing(10)
 
-        add_order_btn = QPushButton("➕ добавить заказ")
-        add_order_btn.setFixedWidth(140)
+        add_order_btn = QPushButton("➕ Создать заказ")
         add_order_btn.setFixedHeight(36)
         add_order_btn.setStyleSheet(ADD_ORDER_BUTTON_STYLE)
         add_order_btn.clicked.connect(self.add_order)
         buttons_row.addWidget(add_order_btn)
 
+        self.archive_completed_btn = QPushButton("📦 В архив завершенные")
+        self.archive_completed_btn.setFixedHeight(36)
+        self.archive_completed_btn.clicked.connect(self.archive_completed_orders)
+        self.archive_completed_btn.setStyleSheet(CLIENT_ARCHIVE_BTN_STYLE)
+        has_completed = any(o.status == "Завершен" for o in client.orders)
+        self.archive_completed_btn.setVisible(has_completed)
+        buttons_row.addWidget(self.archive_completed_btn)
+
         settings_btn = QPushButton("⚙ настройки")
-        settings_btn.setFixedWidth(120)
+        settings_btn.setToolTip("Редактировать профиль клиента (имя, email и т.д.)")
         settings_btn.setFixedHeight(36)
         settings_btn.setStyleSheet(SETTINGS_GEAR_BUTTON_STYLE)
         settings_btn.clicked.connect(self.open_client_settings)
 
+        self.recycle_bin_orders_btn = QPushButton("🗑 Корзина заказов")
+        self.recycle_bin_orders_btn.setFixedHeight(36)
+        self.recycle_bin_orders_btn.setStyleSheet(CLIENT_ARCHIVE_BTN_STYLE)  # same style as archive
+        self.recycle_bin_orders_btn.clicked.connect(self.open_recycle_bin_orders)
+        has_deleted_orders = any(o.is_deleted for o in client.orders)
+        self.recycle_bin_orders_btn.setVisible(has_deleted_orders)
+
+        buttons_row.addWidget(self.recycle_bin_orders_btn)
         buttons_row.addWidget(settings_btn)
         buttons_row.addStretch()
 
@@ -124,13 +150,35 @@ class ClientProfileMixin:
         sep1.setStyleSheet(SEPARATOR_STYLE)
         self.profile_layout.addWidget(sep1)
 
+        self.notes_container = QWidget()
+        notes_layout = QVBoxLayout(self.notes_container)
+        notes_layout.setContentsMargins(0, 0, 0, 0)
+        notes_layout.setSpacing(5)
+
         self.notes_edit = QTextEdit()
         self.notes_edit.setPlainText(client.notes)
         self.notes_edit.setFixedHeight(100)
-        self.notes_edit.setVisible(False)
-        self.notes_edit.textChanged.connect(self.save_notes)
         self.notes_edit.setStyleSheet(NOTES_EDIT_STYLE)
-        self.profile_layout.addWidget(self.notes_edit)
+        
+        notes_buttons = QHBoxLayout()
+        save_notes_btn = QPushButton("✅ Сохранить")
+        save_notes_btn.setToolTip("Сохранить комментарий")
+        save_notes_btn.setStyleSheet(NOTES_SAVE_BUTTON_STYLE)
+        save_notes_btn.clicked.connect(self.save_notes)
+        
+        cancel_notes_btn = QPushButton("❌ Отмена")
+        cancel_notes_btn.setToolTip("Отменить изменения и закрыть")
+        cancel_notes_btn.setStyleSheet(NOTES_CANCEL_BUTTON_STYLE)
+        cancel_notes_btn.clicked.connect(self.cancel_notes)
+        
+        notes_buttons.addWidget(save_notes_btn)
+        notes_buttons.addWidget(cancel_notes_btn)
+        notes_buttons.addStretch()
+
+        notes_layout.addWidget(self.notes_edit)
+        notes_layout.addLayout(notes_buttons)
+        self.notes_container.setVisible(False)
+        self.profile_layout.addWidget(self.notes_container)
 
         client_stats = self.calculate_client_stats(client)
         stats_widget = self.create_client_stats_widget(client_stats)
@@ -145,8 +193,9 @@ class ClientProfileMixin:
         orders_label.setStyleSheet(ORDERS_SECTION_STYLE)
         self.profile_layout.addWidget(orders_label)
 
-        if client.orders:
-            for order in client.orders:
+        active_orders = [o for o in client.orders if not o.is_deleted]
+        if active_orders:
+            for order in active_orders:
                 order_widget = OrderWidget(order, self.bridge)
                 self.profile_layout.addWidget(order_widget)
         else:
@@ -165,12 +214,22 @@ class ClientProfileMixin:
 
     def toggle_notes(self):
         if self.current_client:
-            self.notes_edit.setVisible(not self.notes_edit.isVisible())
+            self.notes_container.setVisible(not self.notes_container.isVisible())
+            if self.notes_container.isVisible():
+                self.notes_edit.setPlainText(self.current_client.notes)
 
     def save_notes(self):
+        """Сохраняет заметки и закрывает редактор."""
         if self.current_client:
             self.current_client.notes = self.notes_edit.toPlainText()
             self.save_db()
+            self.notes_container.setVisible(False)
+            
+    def cancel_notes(self):
+        """Отменяет редактирование заметок и закрывает редактор."""
+        if self.current_client:
+            self.notes_edit.setPlainText(self.current_client.notes)
+            self.notes_container.setVisible(False)
 
     def open_client_settings(self):
         if not self.current_client:
@@ -185,3 +244,23 @@ class ClientProfileMixin:
             self.save_db()
             self.render_client_profile()
             self.refresh_list()
+
+    def archive_completed_orders(self):
+        from PySide6.QtWidgets import QMessageBox
+        answer = QMessageBox.question(
+            self,
+            "Архивация заказов",
+            "Отправить все завершенные заказы этого клиента в архив?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.bridge.archive_completed_orders(self.current_client)
+
+    def open_recycle_bin_orders(self):
+        from ....dialogs import RecycleBinOrdersDialog
+        if not self.current_client:
+            return
+            
+        dialog = RecycleBinOrdersDialog(self.current_client, self.bridge)
+        dialog.exec()
+        self.render_client_profile()

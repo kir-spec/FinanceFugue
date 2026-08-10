@@ -47,12 +47,10 @@ class FileItemWidget(QWidget):
         self.name_label.customContextMenuRequested.connect(self.show_context_menu)
 
         btn_open = QPushButton("Открыть")
-        btn_open.setFixedWidth(60)
         btn_open.clicked.connect(self.open_file)
         btn_open.setStyleSheet(BUTTON_COMPACT_STYLE)
 
         btn_delete = QPushButton("Удалить")
-        btn_delete.setFixedWidth(60)
         btn_delete.clicked.connect(self.delete_file)
         btn_delete.setStyleSheet(BUTTON_DANGER_COMPACT_STYLE)
 
@@ -118,6 +116,22 @@ class FileItemWidget(QWidget):
     def open_file(self):
         try:
             path = self.file_obj.path
+            
+            # Resolve relative paths
+            if not os.path.isabs(path):
+                db_folder = self._bridge.app_settings.get('database_path', self._bridge.storage_db_dir())
+                path = os.path.normpath(os.path.join(db_folder, path))
+            
+            # Auto-healing: if absolute path is broken, check if it exists in the relative attached_files
+            if not os.path.exists(path):
+                db_folder = self._bridge.app_settings.get('database_path', self._bridge.storage_db_dir())
+                fallback_path = os.path.join(db_folder, "attached_files", self._order.id, os.path.basename(path))
+                if os.path.exists(fallback_path):
+                    path = fallback_path
+                    # Automatically heal the link (convert to relative)
+                    self.file_obj.path = os.path.join("attached_files", self._order.id, os.path.basename(path)).replace('\\', '/')
+                    self._bridge.request_save()
+
             if not os.path.exists(path):
                 QMessageBox.warning(
                     self,

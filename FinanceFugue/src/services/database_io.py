@@ -1,4 +1,5 @@
 """Импорт и экспорт базы данных JSON."""
+import copy
 import json
 import shutil
 from datetime import datetime
@@ -30,6 +31,10 @@ def export_database(
     Возвращает путь к созданному JSON. Если ``include_files=True``,
     возвращает ``path``, рядом с которым создана папка ``files/``.
     """
+    # Deep copy: экспорт может мутировать file.path, оригинальные
+    # объекты не должны пострадать.
+    clients = copy.deepcopy(clients)
+
     if include_files and file_storage_mode == "copy":
         # Папка files/ рядом с JSON
         export_dir = path.parent

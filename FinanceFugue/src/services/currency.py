@@ -45,7 +45,9 @@ def sum_by_currency(
     active_only: bool = False,
 ) -> dict[str, float]:
     """Суммирует поле заказа (advance, debt, total_received) в разрезе валют."""
-    totals: dict[str, float] = defaultdict(float)
+    import math
+    
+    values_by_currency = defaultdict(list)
     for order in orders:
         if active_only and getattr(order, "status", "") == "Завершен":
             continue
@@ -58,8 +60,10 @@ def sum_by_currency(
             value = order.total_received
         else:
             raise ValueError(f"Unknown field: {field}")
-        totals[currency] += value
-    return dict(totals)
+        values_by_currency[currency].append(value)
+        
+    totals = {c: math.fsum(vals) for c, vals in values_by_currency.items()}
+    return totals
 
 
 def has_outstanding_debt(debt_by_currency: dict[str, float]) -> bool:

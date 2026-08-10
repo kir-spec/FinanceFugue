@@ -8,17 +8,9 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox, QDialog
 
 from ....dialogs import ClientOrdersExportDialog
 from ....logger import get_logger
+from ....utils.path_safety import sanitize_path_component as _sanitize_filename
 
 logger = get_logger("MainWindow")
-
-
-def _sanitize_filename(name: str) -> str:
-    """Удаляет символы, запрещённые в именах файлов Windows."""
-    import re
-    if not name:
-        return "_"
-    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip().rstrip(".")
-    return cleaned or "_"
 
 
 class ClientExportMixin:

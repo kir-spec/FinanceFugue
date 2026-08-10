@@ -10,6 +10,7 @@ from ...storage import CRMStorage, DatabaseLoadError
 from ...ui.app_bridge import AppBridge
 from ...utils.instance_lock import InstanceLock, InstanceLockError
 from ...logger import get_logger
+from ...services.archive import ArchiveManager
 
 from .mixins import (
     StartupMixin,
@@ -63,6 +64,7 @@ class FinanceFugueWindow(
                 db_filename = str(user_data_path() / "pro_database.json")
 
         self.storage = CRMStorage(db_filename)
+        self.archive_manager = ArchiveManager(self.storage)
         self._instance_lock = InstanceLock(self.storage.path.with_suffix(".lock"))
         try:
             self._instance_lock.acquire()

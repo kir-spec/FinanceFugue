@@ -40,6 +40,7 @@ class Order:
     created_at: str = ""
     deadline: str = ""
     status: str = "В работе"
+    is_deleted: bool = False  # Флаг корзины заказов
     files: List[ProjectFile] = field(default_factory=list)
     payments: List[Payment] = field(default_factory=list)
     # Кэши для агрегатов. Пересчитываются вручную через
@@ -117,7 +118,9 @@ class Order:
         except ValueError:
             return None
 
-    def add_payment(self, amount: float, payment_type: str = "платеж", note: str = "", date: str = None):
+    def add_payment(
+        self, amount: float, payment_type: str = "платеж", note: str = "", date: Optional[str] = None
+    ) -> Optional[Payment]:
         """Добавить платеж.
 
         Валидация:
@@ -162,6 +165,8 @@ class Order:
         if payment_type == "аванс":
             self.advance = max(self.advance, self.total_advance_received)
 
+        return payment
+
     def update_advance(self, new_advance: float):
         """Обновить сумму аванса"""
         if not math.isfinite(new_advance):
@@ -176,14 +181,13 @@ class Order:
         diff = new_advance - old_advance
         
         if diff != 0:
-            self.advance = new_advance
-            # Если есть разница, добавляем коррекцию аванса
+            # Сначала проводим платеж, так как он может выбросить ValueError при валидации
             if diff > 0:
-                # Добавляем дополнительный аванс
                 self.add_payment(diff, "аванс", "Корректировка аванса")
             else:
-                # Уменьшаем аванс (возврат)
                 self.add_payment(diff, "аванс", "Уменьшение аванса")
+            # Только после успешного платежа меняем значение
+            self.advance = new_advance
 
     def update_price(self, new_price: float):
         """Обновить стоимость заказа с проверками.
@@ -221,6 +225,13 @@ class Order:
                     if remaining_advance < 0:
                         raise ValueError("Невозможно удалить платеж: аванс станет отрицательным")
 
+                # Нельзя удалять возврат (отрицательный платеж), если после этого
+                # полученная сумма превысит общую стоимость заказа.
+                if payment.amount < 0:
+                    new_total = self.total_received - payment.amount
+                    if new_total > self.price:
+                        raise ValueError("Невозможно удалить возврат: общая сумма превысит стоимость заказа")
+
                 self.payments.pop(i)
                 self._recalculate_totals()
                 return True
@@ -232,5 +243,7 @@ class Client:
     name: str
     email: str = ""  # Добавлено поле почты
     social_link: str = ""  # Добавлено поле ссылки
+    avatar_path: str = ""  # Относительный путь до аватарки
+    is_deleted: bool = False  # Флаг корзины
     notes: str = ""
     orders: List[Order] = field(default_factory=list)

@@ -2,7 +2,7 @@
 
 CRM для управления клиентами и заказами.
 
-**Версия:** 04.08.2026 (security audit round 3)
+**Версия:** 1.0.0 (04.08.2026)
 
 ## Что это
 
@@ -34,7 +34,7 @@ bandit -c pyproject.toml -r src/
 mypy src/
 ```
 
-На текущий момент: **60 passed**, ruff clean, bandit 0 (1 fixed FP).
+На текущий момент: **89 passed**, ruff clean, bandit 0 issues.
 
 ## Сборка EXE (Windows)
 
@@ -103,6 +103,8 @@ tests/
   test_folder_import_service.py — folder scan/apply
   test_app_bridge.py     — bridge signal contract
   test_storage_rebind.py — lock rebind
+  test_round3_fixes.py   — round 3: кэш total_*, BackupWorker, symlink
+  test_version_eula.py   — константы версий, EULA renderer, шаблон
 ```
 
 ## Данные

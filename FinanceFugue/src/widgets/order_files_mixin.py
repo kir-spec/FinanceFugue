@@ -1,17 +1,17 @@
 """Файлы и DnD для карточки заказа."""
 import os
 import platform
-import shutil
 import subprocess
-import zipfile
 from datetime import datetime
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QPushButton, QMessageBox, QFileDialog,
+    QWidget, QHBoxLayout, QLabel, QPushButton, QMessageBox, QFileDialog, QProgressDialog
 )
 from ..models import ProjectFile
 from ..logger import get_logger
 from ..theme import BUTTON_COMPACT_STYLE, FOLDER_ACCESS_LABEL_STYLE
+from ..utils.file_worker import CopyWorkerThread, ZipWorkerThread
 
 logger = get_logger("Widgets")
 
@@ -71,12 +71,10 @@ class OrderFilesMixin:
             else:
                 files_to_add.extend(all_files)
         
-        # Обрабатываем файлы
-        for file_path in files_to_add:
-            self.add_file_with_storage_option(file_path)
         
-        self._bridge.request_profile_refresh()
-        self._bridge.request_save()
+        # Обрабатываем файлы
+        if files_to_add:
+            self.add_multiple_files_with_storage_option(files_to_add)
 
     def add_folder_access_button(self, folder_path):
         """Добавляет ссылку на папку в заказ (без создания файлов на диске пользователя)."""
@@ -103,7 +101,6 @@ class OrderFilesMixin:
         folder_label.setStyleSheet(FOLDER_ACCESS_LABEL_STYLE)
         
         open_btn = QPushButton("Открыть папку")
-        open_btn.setFixedWidth(80)
         open_btn.clicked.connect(lambda: self.open_folder(folder_path))
         open_btn.setStyleSheet(BUTTON_COMPACT_STYLE)
         
@@ -135,74 +132,106 @@ class OrderFilesMixin:
         else:
             QMessageBox.warning(self, "Папка не найдена", f"Папка {folder_path} не существует.")
 
-    def add_file_with_storage_option(self, file_path):
-        """Добавляет файл или папку с предложением о месте хранения"""
-        is_dir = os.path.isdir(file_path)
-        
+    def add_multiple_files_with_storage_option(self, file_paths):
+        """Пакетное добавление файлов с проверкой режима хранения и асинхронным копированием."""
+        if not file_paths:
+            return
+            
         if not self._bridge.app_settings:
             # Если настройки не загружены, используем прямое добавление (как ссылку)
-            self.order.files.append(ProjectFile(
-                path=file_path,
-                name=os.path.basename(file_path),
-                is_finished=False,
-                is_folder=is_dir
-            ))
+            for path in file_paths:
+                self.order.files.append(ProjectFile(
+                    path=path,
+                    name=os.path.basename(path),
+                    is_finished=False,
+                    is_folder=os.path.isdir(path)
+                ))
+            self._bridge.request_profile_refresh()
+            self._bridge.request_save()
             return
-        
+            
         storage_mode = self._bridge.app_settings.get('file_storage_mode', 'copy')
         
         if storage_mode == 'link':
-            # Оставляем файл на месте
-            final_path = file_path
+            # Оставляем файлы на месте (храним абсолютные пути)
+            for path in file_paths:
+                self.order.files.append(ProjectFile(
+                    path=path,
+                    name=os.path.basename(path),
+                    is_finished=False,
+                    is_folder=os.path.isdir(path)
+                ))
+            self._bridge.request_profile_refresh()
+            self._bridge.request_save()
         else:  # 'copy'
-            # Копируем файл в папку базы данных
+            # Запускаем асинхронное копирование с относительными путями
             db_folder = self._bridge.app_settings.get('database_path', self._bridge.storage_db_dir())
-            files_folder = os.path.join(db_folder, "attached_files", self.order.id)
-            os.makedirs(files_folder, exist_ok=True)
+            tasks = []
+            for path in file_paths:
+                tasks.append({
+                    'path': path,
+                    'is_dir': os.path.isdir(path)
+                })
+                
+            progress = QProgressDialog("Копирование файлов в базу...", "Отмена", 0, len(tasks), self._bridge.window)
+            progress.setWindowTitle("Добавление файлов")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
             
-            base_name = os.path.basename(file_path)
-            new_path = os.path.join(files_folder, base_name)
+            self.copy_thread = CopyWorkerThread(tasks, db_folder, self.order.id)
             
-            # Проверяем, не существует ли уже файл/папка с таким именем
-            counter = 1
-            name, ext = os.path.splitext(base_name)
-            while os.path.exists(new_path):
-                new_path = os.path.join(files_folder, f"{name}_{counter}{ext}")
-                counter += 1
+            def on_progress(current, total):
+                progress.setValue(current)
+                
+            def on_one_finished(orig_path, final_rel_path, is_dir):
+                self.order.files.append(ProjectFile(
+                    path=final_rel_path,
+                    name=os.path.basename(final_rel_path),
+                    is_finished=False,
+                    is_folder=is_dir
+                ))
+                
+            def on_all_finished():
+                progress.setValue(len(tasks))
+                self._bridge.request_profile_refresh()
+                self._bridge.request_save()
+                
+            def on_error(err):
+                QMessageBox.warning(self, "Ошибка копирования", f"Возникла ошибка:\n{err}")
+                on_all_finished()
+                
+            progress.canceled.connect(self.copy_thread.cancel)
+            self.copy_thread.progress.connect(on_progress)
+            self.copy_thread.finished_one.connect(on_one_finished)
+            self.copy_thread.finished_all.connect(on_all_finished)
+            self.copy_thread.error.connect(on_error)
             
-            try:
-                if is_dir:
-                    # Копирование папки
-                    shutil.copytree(file_path, new_path)
-                else:
-                    # Копирование файла
-                    shutil.copy2(file_path, new_path)
-                final_path = new_path
-            except Exception as e:
-                QMessageBox.warning(
-                    self,
-                    "Ошибка копирования",
-                    f"Не удалось скопировать объект в базу данных:\n{e}\n\n"
-                    "Файл не добавлен. Проверьте режим хранения или повторите позже.",
-                )
-                return
-
-        self.order.files.append(ProjectFile(
-            path=final_path,
-            name=os.path.basename(final_path),
-            is_finished=False,
-            is_folder=is_dir
-        ))
+            # Start background thread
+            progress.show()
+            self.copy_thread.start()
 
     def export_files_to_zip(self):
-        """Экспортирует все файлы из заказа в ZIP архив"""
-        ready_files = [f for f in self.order.files if os.path.exists(f.path)]
-        if not ready_files:
-            QMessageBox.information(
-                self, 
-                "Нет файлов", 
-                "Нет файлов для экспорта."
-            )
+        """Экспортирует все файлы из заказа в ZIP архив асинхронно"""
+        # Сначала резолвим пути, чтобы знать абсолютные пути к файлам для экспорта
+        db_folder = self._bridge.app_settings.get('database_path', self._bridge.storage_db_dir())
+        
+        files_info = []
+        for f in self.order.files:
+            if not f.path:
+                continue
+            # Резолвим путь
+            if os.path.isabs(f.path):
+                abs_path = f.path
+            else:
+                abs_path = os.path.normpath(os.path.join(db_folder, f.path))
+                
+            if os.path.exists(abs_path):
+                files_info.append({
+                    'abs_path': abs_path,
+                    'arcname': f.name
+                })
+                
+        if not files_info:
+            QMessageBox.information(self, "Нет файлов", "Нет файлов для экспорта или они не найдены на диске.")
             return
         
         default_name = f"{self.order.service_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
@@ -214,19 +243,34 @@ class OrderFilesMixin:
         )
         
         if path:
-            try:
-                with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
-                    for f in ready_files:
-                        z.write(f.path, f.name)
+            progress = QProgressDialog("Создание ZIP архива...", "Отмена", 0, len(files_info), self._bridge.window)
+            progress.setWindowTitle("Экспорт файлов")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            
+            self.zip_thread = ZipWorkerThread(files_info, path)
+            
+            def on_progress(current, total):
+                progress.setValue(current)
                 
+            def on_finished(zip_path):
+                progress.setValue(len(files_info))
                 QMessageBox.information(
                     self, 
                     "Экспорт завершен", 
-                    f"Файлы успешно экспортированы в архив:\n{path}\n"
-                    f"Экспортировано файлов: {len(ready_files)}"
+                    f"Файлы успешно экспортированы в архив:\n{zip_path}\n"
+                    f"Экспортировано элементов: {len(files_info)}"
                 )
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось создать архив: {e}")
+                
+            def on_error(err):
+                QMessageBox.critical(self, "Ошибка", f"Не удалось создать архив: {err}")
+                
+            progress.canceled.connect(self.zip_thread.cancel)
+            self.zip_thread.progress.connect(on_progress)
+            self.zip_thread.finished.connect(on_finished)
+            self.zip_thread.error.connect(on_error)
+            
+            progress.show()
+            self.zip_thread.start()
 
     def add_file(self):
         msg_box = QMessageBox(self._bridge.window)
@@ -252,11 +296,7 @@ class OrderFilesMixin:
                 "Все файлы (*.*)"
             )
             if paths:
-                for p in paths:
-                    logger.info(f"Добавление файла в заказ: {os.path.basename(p)}")
-                    self.add_file_with_storage_option(p)
-                self._bridge.request_profile_refresh()
-                self._bridge.request_save()
+                self.add_multiple_files_with_storage_option(paths)
         
         elif clicked == btn_folder:
             folder = QFileDialog.getExistingDirectory(
@@ -264,7 +304,5 @@ class OrderFilesMixin:
                 "Выберите папку для добавления"
             )
             if folder:
-                logger.info(f"Добавление папки в заказ: {os.path.basename(folder)}")
-                self.add_file_with_storage_option(folder)
-                self._bridge.request_profile_refresh()
-                self._bridge.request_save()
+                logger.info("Добавление папки в заказ: %s", os.path.basename(folder))
+                self.add_multiple_files_with_storage_option([folder])

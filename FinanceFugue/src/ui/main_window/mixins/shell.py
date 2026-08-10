@@ -12,10 +12,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from .... import APP_NAME, VERSION
-from ....dialogs import AboutDialog, FileManagerDialog, SettingsDialog
+from ....dialogs import AboutDialog, FileManagerDialog, SettingsDialog, RecycleBinDialog
 from ....services.client_stats import calculate_global_dashboard
 from ....services.deadline_notifier import collect_deadline_alerts, format_alerts_message
 from ....theme import (
@@ -33,7 +33,6 @@ from ....theme import (
     create_dark_palette,
     status_bar_message,
 )
-from PySide6.QtCore import QTimer
 from ....ui.client_list_widget import ClientListWidget
 from ....ui.dashboard import create_stat_widget
 from ....ui.icon_loader import load_app_icon
@@ -46,7 +45,8 @@ logger = get_logger("MainWindow")
 class ShellMixin:
     def init_ui(self):
         self.setWindowTitle(f"{APP_NAME} {VERSION}")
-        self.resize(900, 800)
+        self.resize(1400, 900)
+        self.setMinimumSize(1000, 600)
         icon = load_app_icon()
         if not icon.isNull():
             self.setWindowIcon(icon)
@@ -62,26 +62,56 @@ class ShellMixin:
 
         self.dash = QFrame()
         self.dash.setStyleSheet(TRANSPARENT_FRAME_STYLE)
-        self.dash.setFixedHeight(60)
+        self.dash.setMinimumHeight(60)
         self.dash_layout = QHBoxLayout(self.dash)
         self.dash_layout.setContentsMargins(0, 0, 0, 0)
         self.dash_layout.setSpacing(8)
         self.dash_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Фильтр периода
+        self.dash_filter_cb = QComboBox()
+        self.dash_filter_cb.addItems([
+            "За всё время",
+            "Текущий год",
+            "Прошлый год",
+            "Текущий месяц"
+        ])
+        self.dash_filter_cb.setStyleSheet(SORT_COMBO_STYLE)
+        self.dash_filter_cb.currentIndexChanged.connect(self.update_dash)
+        self.dash_layout.addWidget(self.dash_filter_cb)
+        
         main_layout.addWidget(self.dash)
 
         work_area = QHBoxLayout()
         work_area.setSpacing(15)
 
         left_panel = QWidget()
-        left_panel.setFixedWidth(250)
+        left_panel.setMinimumWidth(300)
+        left_panel.setMaximumWidth(450)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
+        sidebar_header = QHBoxLayout()
         clients_label = QLabel("👤 КЛИЕНТЫ")
         clients_label.setStyleSheet(PANEL_HEADER_STYLE)
-        left_layout.addWidget(clients_label)
+        
+        self.archive_btn = QPushButton("🗄 Архив")
+        self.archive_btn.clicked.connect(self.open_archive)
+        self.archive_btn.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
+        
+        self.recycle_bin_btn = QPushButton("🗑 Корзина")
+        self.recycle_bin_btn.clicked.connect(self.open_recycle_bin)
+        self.recycle_bin_btn.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
+        
+        sidebar_header.addWidget(clients_label)
+        sidebar_header.addStretch()
+        sidebar_header.addWidget(self.archive_btn)
+        sidebar_header.addWidget(self.recycle_bin_btn)
+        
+        left_layout.addLayout(sidebar_header)
 
         self.search_edit = QLineEdit()
+        self.search_edit.setToolTip("Быстрый поиск клиента по имени")
         self.search_edit.setPlaceholderText("Поиск...")
         self.search_edit.setClearButtonEnabled(True)
         # Дебаунс 200мс: refresh_list не вызывается на каждом символе.
@@ -96,6 +126,7 @@ class ShellMixin:
         left_layout.addWidget(self.search_edit)
 
         self.sort_combo = QComboBox()
+        self.sort_combo.setToolTip("Сортировка списка клиентов")
         self.sort_combo.addItems(
             ["Имя (А-Я)", "Имя (Я-А)", "Новые заказы", "Старые заказы", "Срочные"]
         )
@@ -112,26 +143,31 @@ class ShellMixin:
         left_layout.addWidget(self.cl_list)
 
         btn_files = QPushButton("📁 Менеджер файлов")
+        btn_files.setToolTip("Открыть встроенный менеджер файлов")
         btn_files.clicked.connect(self.open_file_manager)
         btn_files.setStyleSheet(SIDEBAR_BUTTON_STYLE)
         left_layout.addWidget(btn_files)
 
         btn_add = QPushButton("➕ Новый клиент")
+        btn_add.setToolTip("Добавить нового клиента")
         btn_add.clicked.connect(self.add_client)
         btn_add.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
         left_layout.addWidget(btn_add)
 
         btn_set = QPushButton("⚙ Настройки")
+        btn_set.setToolTip("Глобальные настройки программы")
         btn_set.clicked.connect(self.open_settings)
         btn_set.setStyleSheet(SIDEBAR_BUTTON_STYLE)
         left_layout.addWidget(btn_set)
 
         btn_help = QPushButton("❓ Справка")
+        btn_help.setToolTip("Открыть руководство пользователя")
         btn_help.clicked.connect(self.open_help)
         btn_help.setStyleSheet(SIDEBAR_BUTTON_STYLE)
         left_layout.addWidget(btn_help)
 
         self.db_info_label = QLabel(f"Клиентов: {len(self.clients)}")
+        self.db_info_label.setToolTip("Общее количество клиентов в базе")
         self.db_info_label.setStyleSheet(DB_INFO_LABEL_STYLE)
         left_layout.addWidget(self.db_info_label)
 
@@ -143,8 +179,8 @@ class ShellMixin:
 
         self.profile_container = QWidget()
         self.profile_layout = QVBoxLayout(self.profile_container)
-        self.profile_layout.setContentsMargins(15, 15, 15, 15)
-        self.profile_layout.setSpacing(10)
+        self.profile_layout.setContentsMargins(30, 30, 30, 30)
+        self.profile_layout.setSpacing(15)
 
         self.placeholder = QLabel("👈 Выберите клиента из списка или создайте нового")
         self.placeholder.setStyleSheet(PLACEHOLDER_STYLE)
@@ -187,6 +223,16 @@ class ShellMixin:
     def focus_search(self):
         self.search_edit.setFocus()
         self.search_edit.selectAll()
+
+    def open_archive(self):
+        from ....dialogs import ArchiveViewerDialog
+        dialog = ArchiveViewerDialog(self.bridge)
+        dialog.exec()
+
+    def open_recycle_bin(self):
+        dialog = RecycleBinDialog(self.bridge)
+        dialog.exec()
+        self.refresh_list()
 
     def open_file_manager(self):
         FileManagerDialog(self, self).exec()
@@ -246,12 +292,43 @@ class ShellMixin:
             )
 
     def update_dash(self):
-        while self.dash_layout.count():
-            item = self.dash_layout.takeAt(0)
+        # Очищаем дашборд (кроме фильтра)
+        while self.dash_layout.count() > 1:
+            item = self.dash_layout.takeAt(1)
             if item.widget():
                 item.widget().deleteLater()
 
-        for title, value, color in calculate_global_dashboard(self.clients):
+        filter_text = self.dash_filter_cb.currentText()
+        start_date = None
+        end_date = None
+        archive_clients = None
+
+        if filter_text != "За всё время":
+            from datetime import datetime, date
+            today = date.today()
+            if filter_text == "Текущий год":
+                start_date = datetime(today.year, 1, 1)
+                end_date = datetime(today.year, 12, 31)
+            elif filter_text == "Прошлый год":
+                start_date = datetime(today.year - 1, 1, 1)
+                end_date = datetime(today.year - 1, 12, 31)
+            elif filter_text == "Текущий месяц":
+                start_date = datetime(today.year, today.month, 1)
+                # Конец месяца
+                if today.month == 12:
+                    end_date = datetime(today.year, 12, 31)
+                else:
+                    end_date = datetime(today.year, today.month + 1, 1)
+            
+            # Если не "За всё время", то подгружаем архив для полной картины
+            archive_clients = self.archive_manager.get_archive_clients()
+
+        for title, value, color in calculate_global_dashboard(
+            self.clients,
+            archive_clients=archive_clients,
+            start_date=start_date,
+            end_date=end_date
+        ):
             self.dash_layout.addWidget(create_stat_widget(title, value, color))
 
         self.dash_layout.addStretch()
@@ -261,11 +338,16 @@ class ShellMixin:
             self.save_db()
         except Exception as e:
             logger.error("Ошибка сохранения при выходе: %s", e, exc_info=True)
-            QMessageBox.warning(
+            answer = QMessageBox.question(
                 self,
                 APP_NAME,
-                f"Не удалось сохранить базу данных при выходе:\n{e}",
+                f"Не удалось сохранить базу данных при выходе:\n{e}\n\n"
+                "Выйти без сохранения?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
+            if answer != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
         self.backup_settings()
         if hasattr(self, "_deadline_timer"):
             self._deadline_timer.stop()

@@ -325,7 +325,7 @@ class DatabaseOpsMixin:
             warn_box.setIcon(QMessageBox.Icon.Critical)
 
             btn_yes = warn_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
-            btn_no = warn_box.addButton("Отмена", QMessageBox.ButtonRole.NoRole)
+            warn_box.addButton("Отмена", QMessageBox.ButtonRole.NoRole)
 
             warn_box.exec()
 
@@ -399,7 +399,7 @@ class DatabaseOpsMixin:
             warn_box.setIcon(QMessageBox.Icon.Critical)
 
             btn_yes = warn_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
-            btn_no = warn_box.addButton("Отмена", QMessageBox.ButtonRole.NoRole)
+            warn_box.addButton("Отмена", QMessageBox.ButtonRole.NoRole)
 
             warn_box.exec()
 

@@ -32,7 +32,7 @@ _BTN_COMPACT = """
     QPushButton {
         background-color: #2D2D2D; color: #FFFFFF;
         border: 1px solid #3D3D3D; padding: 4px;
-        border-radius: 3px; font-size: 11px;
+        border-radius: 3px; font-size: 10pt;
     }
     QPushButton:hover { background-color: #3D3D3D; }
 """
@@ -40,18 +40,24 @@ _BTN_DANGER_COMPACT = """
     QPushButton {
         background-color: #DC3545; color: white;
         border: 1px solid #DC3545; padding: 4px;
-        border-radius: 3px; font-size: 11px;
+        border-radius: 3px; font-size: 10pt;
     }
     QPushButton:hover { background-color: #C82333; }
+    QPushButton#archiveButton {
+        background-color: #17A2B8; color: white;
+    }
+    QPushButton#archiveButton:hover {
+        background-color: #138496;
+    }
 """
 _INPUT_BASE = """
     QLineEdit, QTextEdit, QComboBox {
         background-color: #333333; color: #FFFFFF;
-        border: 1px solid #444444; padding: 6px; border-radius: 3px; font-size: 12px;
+        border: 1px solid #444444; padding: 6px; border-radius: 3px; font-size: 11pt;
     }
 """
 _CHECKBOX = """
-    QCheckBox { color: #DDDDDD; font-size: 12px; padding: 3px; }
+    QCheckBox { color: #DDDDDD; font-size: 11pt; padding: 3px; }
     QCheckBox::indicator {
         width: 16px; height: 16px;
         border: 2px solid #555555; background: #222222; border-radius: 3px;
@@ -61,7 +67,7 @@ _CHECKBOX = """
 _GROUPBOX = """
     QGroupBox {
         color: #FFFFFF; border: 1px solid #3D3D3D; border-radius: 5px;
-        margin-top: 10px; font-size: 14px; font-weight: bold; padding-top: 15px;
+        margin-top: 10px; font-size: 13pt; font-weight: bold; padding-top: 15px;
     }
     QGroupBox::title {
         subcontrol-origin: margin; subcontrol-position: top center;
@@ -73,23 +79,23 @@ _GROUPBOX = """
 _LISTWIDGET = """
     QListWidget {
         background-color: #252525; color: #FFFFFF;
-        border: 1px solid #3D3D3D; font-size: 12px;
+        border: 1px solid #3D3D3D; font-size: 11pt;
     }
 """
 
 DIALOG_STYLESHEET = f"""
     QDialog {{ background-color: {COLOR_BG}; }}
-    QLabel {{ color: {COLOR_TEXT_MUTED}; font-size: 12px; }}
+    QLabel {{ color: {COLOR_TEXT_MUTED}; font-size: 11pt; }}
     QTextEdit {{
         background-color: {COLOR_BG_PANEL}; color: {COLOR_TEXT_MUTED};
-        border: 1px solid {COLOR_BORDER}; border-radius: 4px; font-size: 12px;
+        border: 1px solid {COLOR_BORDER}; border-radius: 4px; font-size: 11pt;
     }}
     QPushButton {{
         background-color: #2D2D2D; color: {COLOR_TEXT};
         border: 1px solid {COLOR_BORDER}; padding: 8px 16px; border-radius: 4px;
     }}
     QPushButton:hover {{ background-color: #3D3D3D; }}
-    QCheckBox {{ color: {COLOR_TEXT}; font-size: 12px; }}
+    QCheckBox {{ color: {COLOR_TEXT}; font-size: 11pt; }}
     {_INPUT_BASE}
     {_CHECKBOX}
     {_GROUPBOX}
@@ -109,8 +115,8 @@ DIALOG_STYLESHEET = f"""
 """
 
 SETTINGS_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
-    QLabel { color: #FFFFFF; font-size: 14px; padding: 5px; }
-    QPushButton { padding: 10px; font-size: 14px; }
+    QLabel { color: #FFFFFF; font-size: 13pt; padding: 5px; }
+    QPushButton { padding: 10px; font-size: 13pt; }
 """
 
 FOLDER_IMPORT_DIALOG_STYLESHEET = DIALOG_STYLESHEET
@@ -118,14 +124,14 @@ FOLDER_IMPORT_DIALOG_STYLESHEET = DIALOG_STYLESHEET
 FIRST_RUN_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
     QGroupBox { border: 2px solid #444444; }
     QGroupBox::title { subcontrol-position: top left; left: 10px; padding: 0 10px; }
-    QRadioButton { color: #FFFFFF; font-size: 12px; padding: 5px; }
-    QPushButton { padding: 10px 20px; font-size: 14px; }
+    QRadioButton { color: #FFFFFF; font-size: 11pt; padding: 5px; }
+    QPushButton { padding: 10px 20px; font-size: 13pt; }
 """
 
 FILE_MANAGER_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
     QTreeWidget {
         background-color: #252525; color: #FFFFFF;
-        border: 1px solid #3D3D3D; font-size: 12px;
+        border: 1px solid #3D3D3D; font-size: 11pt;
     }
 """
 
@@ -153,7 +159,7 @@ CLIENT_SETTINGS_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
 ORDERS_EXPORT_DIALOG_STYLESHEET = DIALOG_STYLESHEET
 
 PAYMENTS_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
-    QDialog { font-size: 12px; }
+    QDialog { font-size: 11pt; }
 """
 
 MESSAGEBOX_STYLESHEET = """
@@ -161,9 +167,16 @@ MESSAGEBOX_STYLESHEET = """
     QMessageBox QLabel { color: #FFFFFF; }
     QMessageBox QPushButton {
         background-color: #2D2D2D; color: #FFFFFF;
-        border: 1px solid #3D3D3D; padding: 8px 12px; border-radius: 4px; font-size: 12px;
+        border: 1px solid #3D3D3D; padding: 8px 12px; border-radius: 4px; font-size: 11pt;
     }
     QMessageBox QPushButton:hover { background-color: #3D3D3D; }
+    QToolTip {
+        background-color: #2D2D2D;
+        color: #FFFFFF;
+        border: 1px solid #555555;
+        padding: 4px;
+        font-size: 11pt;
+    }
 """
 
 MAIN_WINDOW_STYLESHEET = f"""
@@ -172,7 +185,7 @@ MAIN_WINDOW_STYLESHEET = f"""
     QPushButton {{
         background-color: #2D2D2D; color: {COLOR_TEXT};
         padding: 5px 10px; border-radius: 4px;
-        border: 1px solid {COLOR_BORDER}; font-size: 12px;
+        border: 1px solid {COLOR_BORDER}; font-size: 11pt;
     }}
     QPushButton:hover {{ background-color: #3D3D3D; }}
     QPushButton:pressed {{ background-color: #4D4D4D; }}
@@ -181,7 +194,7 @@ MAIN_WINDOW_STYLESHEET = f"""
     }}
     QListWidget {{
         background-color: #252525; color: #FFFFFF;
-        border: 1px solid #3D3D3D; outline: none; font-size: 12px;
+        border: 1px solid #3D3D3D; outline: none; font-size: 11pt;
     }}
     QListWidget::item {{ padding: 4px 8px; border-bottom: 1px solid #333333; }}
     QListWidget::item:hover {{ background-color: #333333; }}
@@ -204,7 +217,7 @@ MAIN_WINDOW_STYLESHEET = f"""
     {_CHECKBOX}
     QTextEdit {{
         background-color: #252525; color: #FFFFFF;
-        border: 1px solid #444444; padding: 6px; border-radius: 3px; font-size: 12px;
+        border: 1px solid #444444; padding: 6px; border-radius: 3px; font-size: 11pt;
     }}
 """
 
@@ -221,10 +234,10 @@ SEPARATOR_LINE_STYLE = (
     "border: none; margin: 3px 0;"
 )
 
-ORDER_TITLE_STYLE = "font-weight: bold; color: #00D1FF; font-size: 18px;"
-FIELD_LABEL_STYLE = "color: #DDDDDD; font-size: 12px; font-weight: bold;"
-DEADLINE_LABEL_STYLE = "color: #FFFFFF; font-size: 14px; font-weight: bold;"
-START_DATE_LABEL_STYLE = "color: #28A745; font-size: 14px; font-weight: bold;"
+ORDER_TITLE_STYLE = "font-weight: bold; color: #00D1FF; font-size: 16pt;"
+FIELD_LABEL_STYLE = "color: #DDDDDD; font-size: 11pt; font-weight: bold;"
+DEADLINE_LABEL_STYLE = "color: #FFFFFF; font-size: 13pt; font-weight: bold;"
+START_DATE_LABEL_STYLE = "color: #28A745; font-size: 13pt; font-weight: bold;"
 
 TRANSPARENT_FRAME_STYLE = "QFrame { background-color: transparent; border: none; }"
 SCROLL_AREA_TRANSPARENT_STYLE = "border: none; background-color: transparent;"
@@ -233,7 +246,7 @@ ORDER_TOGGLE_BTN_STYLE = """
     QPushButton {
         background-color: #3D3D3D; color: #00D1FF;
         border: 1px solid #555555; border-radius: 12px;
-        font-size: 14px; font-weight: bold; padding: 0px;
+        font-size: 13pt; font-weight: bold; padding: 0px;
     }
     QPushButton:hover {
         background-color: #4D4D4D; color: #FFFFFF; border-color: #00D1FF;
@@ -243,13 +256,29 @@ ORDER_TOGGLE_BTN_STYLE = """
 ORDER_DELETE_BTN_STYLE = """
     QPushButton {
         background-color: #6C757D; color: white; border: none;
-        padding: 4px 8px; border-radius: 4px; font-size: 11px;
+        padding: 4px 8px; border-radius: 4px; font-size: 10pt;
     }
     QPushButton:hover { background-color: #5A6268; }
 """
 
+ORDER_ARCHIVE_BTN_STYLE = """
+    QPushButton {
+        background-color: #17A2B8; color: white; border: none;
+        padding: 4px 8px; border-radius: 4px; font-size: 10pt;
+    }
+    QPushButton:hover { background-color: #138496; }
+"""
+
+ORDER_ARCHIVE_BTN_STYLE = """
+    QPushButton {
+        background-color: #17A2B8; color: white; border: none;
+        padding: 4px 8px; border-radius: 4px; font-size: 10pt;
+    }
+    QPushButton:hover { background-color: #138496; }
+"""
+
 ORDER_STATUS_CHECKBOX_STYLE = """
-    QCheckBox { color: #DDDDDD; font-size: 12px; padding-left: 5px; }
+    QCheckBox { color: #DDDDDD; font-size: 11pt; padding-left: 5px; }
     QCheckBox::indicator { width: 16px; height: 16px; }
     QCheckBox::indicator:unchecked { border: 2px solid #555555; background: #222222; }
     QCheckBox::indicator:checked { border: 2px solid #28A745; background: #28A745; }
@@ -266,7 +295,7 @@ PAYMENTS_FRAME_STYLE = """
 PAYMENT_ADD_BTN_STYLE = """
     QPushButton {
         background-color: #28A745; color: white; font-weight: bold;
-        padding: 6px 10px; font-size: 12px;
+        padding: 6px 10px; font-size: 11pt;
     }
     QPushButton:hover { background-color: #218838; }
 """
@@ -274,24 +303,32 @@ PAYMENT_ADD_BTN_STYLE = """
 PAYMENT_HISTORY_BTN_STYLE = """
     QPushButton {
         background-color: #0078D7; color: white; font-weight: bold;
-        padding: 6px 10px; border-radius: 4px; font-size: 12px;
+        padding: 6px 10px; border-radius: 4px; font-size: 11pt;
     }
-    QPushButton:hover { background-color: #0056A3; }
+    QPushButton:hover { background-color: #0056B3; }
+"""
+
+CLIENT_ARCHIVE_BTN_STYLE = """
+    QPushButton {
+        background-color: #17A2B8; color: white; border: none;
+        padding: 6px 14px; border-radius: 4px; font-weight: bold;
+    }
+    QPushButton:hover { background-color: #138496; }
 """
 
 VERTICAL_SEPARATOR_STYLE = (
     "background-color: #3D3D3D; min-width: 1px; max-width: 1px; border: none; margin: 0 5px;"
 )
 
-FILES_SECTION_LABEL_STYLE = "font-weight: bold; color: #DDDDDD; font-size: 13px;"
-FOLDER_ACCESS_LABEL_STYLE = "color: #DDDDDD; font-size: 12px;"
+FILES_SECTION_LABEL_STYLE = "font-weight: bold; color: #DDDDDD; font-size: 12pt;"
+FOLDER_ACCESS_LABEL_STYLE = "color: #DDDDDD; font-size: 11pt;"
 
 NEW_ORDER_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
-    QLabel { color: #FFFFFF; font-size: 12px; }
+    QLabel { color: #FFFFFF; font-size: 11pt; }
     QFormLayout { spacing: 10px; }
     QGroupBox {
         color: #FFFFFF; border: 1px solid #444444; border-radius: 5px;
-        margin-top: 10px; font-size: 13px; font-weight: bold; padding-top: 10px;
+        margin-top: 10px; font-size: 12pt; font-weight: bold; padding-top: 10px;
     }
     QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
 """
@@ -314,16 +351,43 @@ CANCEL_DIALOG_BUTTON_STYLE = """
     QPushButton:hover { background-color: #5A6268; }
 """
 
+NOTES_SAVE_BUTTON_STYLE = """
+    QPushButton {
+        background-color: #28A745; color: white;
+        padding: 5px 12px; border-radius: 4px; font-weight: bold;
+    }
+    QPushButton:hover { background-color: #218838; }
+    QPushButton:pressed { background-color: #1E7E34; }
+"""
+
+NOTES_CANCEL_BUTTON_STYLE = """
+    QPushButton {
+        background-color: #DC3545; color: white;
+        padding: 5px 12px; border-radius: 4px; font-weight: bold;
+    }
+    QPushButton:hover { background-color: #C82333; }
+    QPushButton:pressed { background-color: #BD2130; }
+"""
+
+CREATE_ORDER_BUTTON_STYLE = """
+    QPushButton {
+        background-color: #28A745; color: white;
+        padding: 6px 14px; font-weight: bold; border-radius: 4px;
+    }
+    QPushButton:hover { background-color: #218838; }
+    QPushButton:pressed { background-color: #1E7E34; }
+"""
+
 NOTES_EDIT_STYLE = f"""
     QTextEdit {{
         background-color: {COLOR_BG_PANEL}; color: {COLOR_TEXT};
-        border: 2px solid #444444; padding: 8px; border-radius: 4px; font-size: 12px;
+        border: 2px solid #444444; padding: 8px; border-radius: 4px; font-size: 11pt;
     }}
     QTextEdit:focus {{ border-color: {COLOR_PRIMARY}; }}
 """
 
 ORDERS_SECTION_STYLE = f"""
-    font-size: 16px; font-weight: bold; color: {COLOR_TEXT_MUTED};
+    font-size: 14pt; font-weight: bold; color: {COLOR_TEXT_MUTED};
     margin-top: 10px; padding: 5px 0; border-bottom: 2px solid {COLOR_BORDER};
 """
 
@@ -359,8 +423,8 @@ _DEADLINE_DATE_DROPDOWN_TINTED = """
 BUTTON_COMPACT_STYLE = _BTN_COMPACT.strip()
 BUTTON_DANGER_COMPACT_STYLE = _BTN_DANGER_COMPACT.strip()
 
-FILE_NAME_FOLDER_STYLE = "color: #00D1FF; font-size: 13px; font-weight: bold;"
-FILE_NAME_FILE_STYLE = "color: #DDDDDD; font-size: 12px;"
+FILE_NAME_FOLDER_STYLE = "color: #00D1FF; font-size: 12pt; font-weight: bold;"
+FILE_NAME_FILE_STYLE = "color: #DDDDDD; font-size: 11pt;"
 
 MENU_STYLE = """
     QMenu { background-color: #2D2D2D; color: #FFFFFF; border: 1px solid #3D3D3D; }
@@ -371,7 +435,7 @@ MENU_STYLE = """
 DATE_EDIT_STYLE = """
     QDateEdit {
         background-color: #333333; color: #FFFFFF;
-        border: 1px solid #444444; font-size: 14px; font-weight: bold;
+        border: 1px solid #444444; font-size: 13pt; font-weight: bold;
         padding: 4px 6px; border-radius: 3px;
     }
     QDateEdit::drop-down {
@@ -388,82 +452,82 @@ DATE_EDIT_STYLE = """
 SEARCH_FIELD_STYLE = """
     QLineEdit {
         background-color: #2D2D2D; color: #FFFFFF;
-        border: 1px solid #3D3D3D; border-radius: 4px; padding: 6px; font-size: 12px;
+        border: 1px solid #3D3D3D; border-radius: 4px; padding: 6px; font-size: 11pt;
     }
 """
 
 PANEL_HEADER_STYLE = """
-    font-size: 14px; font-weight: bold; color: #00D1FF;
+    font-size: 13pt; font-weight: bold; color: #00D1FF;
     padding: 5px; background-color: #252525; border-radius: 4px;
 """
 
-SIDEBAR_BUTTON_STYLE = "background-color: #2D2D2D; color: white; font-size: 13px; padding: 6px;"
+SIDEBAR_BUTTON_STYLE = "background-color: #2D2D2D; color: white; font-size: 12pt; padding: 6px;"
 PRIMARY_SIDEBAR_BUTTON_STYLE = (
-    "background-color: #0078D7; color: white; font-weight: bold; font-size: 13px; padding: 6px;"
+    "background-color: #0078D7; color: white; font-weight: bold; font-size: 12pt; padding: 6px;"
 )
 
 SORT_COMBO_STYLE = """
     QComboBox {
         background-color: #2D2D2D; color: #FFFFFF;
-        border: 1px solid #3D3D3D; padding: 4px; border-radius: 4px; font-size: 11px;
+        border: 1px solid #3D3D3D; padding: 4px; border-radius: 4px; font-size: 10pt;
     }
 """
 
 DB_INFO_LABEL_STYLE = (
-    "color: #888888; font-size: 11px; padding: 5px; background-color: #252525; border-radius: 4px;"
+    "color: #888888; font-size: 10pt; padding: 5px; background-color: #252525; border-radius: 4px;"
 )
 
 PLACEHOLDER_STYLE = """
-    font-size: 16px; color: #AAAAAA; padding: 40px;
+    font-size: 14pt; color: #AAAAAA; padding: 40px;
     background-color: #252525; border-radius: 8px;
 """
 
-CLIENT_NAME_STYLE = "font-size: 24px; font-weight: bold; color: #00D1FF; padding: 5px 0;"
+CLIENT_NAME_STYLE = "font-size: 20pt; font-weight: bold; color: #00D1FF; padding: 5px 0;"
 NOTES_BUTTON_STYLE = """
     QPushButton {
         background-color: transparent; color: #FFFFFF; border: none;
-        font-size: 18px; padding: 0px;
+        font-size: 16pt; padding: 0px;
     }
     QPushButton:hover { background-color: #333333; border-radius: 18px; }
 """
 ADD_ORDER_BUTTON_STYLE = """
     QPushButton {
         background-color: #28A745; color: white; border: 1px solid #28A745;
-        border-radius: 4px; font-size: 13px; padding: 4px; font-weight: bold;
+        border-radius: 4px; font-size: 12pt; padding: 4px; font-weight: bold;
     }
     QPushButton:hover { background-color: #218838; border-color: #1E7E34; }
 """
 SETTINGS_GEAR_BUTTON_STYLE = """
     QPushButton {
         background-color: #2D2D2D; color: white; border: 1px solid #444444;
-        border-radius: 4px; font-size: 13px; padding: 4px;
+        border-radius: 4px; font-size: 12pt; padding: 4px;
     }
     QPushButton:hover { background-color: #3D3D3D; border-color: #555555; }
 """
 SEPARATOR_STYLE = "background-color: #3D3D3D; min-height: 1px; max-height: 1px; border: none; margin: 5px 0;"
 
-STATUS_BAR_STYLE = "QStatusBar { color: #888888; background: transparent; font-size: 11px; }"
+STATUS_BAR_STYLE = "QStatusBar { color: #888888; background: transparent; font-size: 10pt; }"
 
 DRAG_HINT_STYLE = (
-    "color: #DDDDDD; font-size: 12px; font-style: italic; padding: 5px 10px; "
+    "color: #DDDDDD; font-size: 11pt; font-style: italic; padding: 5px 10px; "
     "background-color: #252525; border-radius: 4px; border: 1px dashed #555555;"
 )
 
 
-def label_accent(*, size: int = 14, padding: str = "0") -> str:
-    return f"font-size: {size}px; font-weight: bold; color: {COLOR_ACCENT}; padding: {padding};"
+def label_accent(*, size: int = 13, padding: str = "0") -> str:
+    return f"font-size: {size}pt; font-weight: bold; color: {COLOR_ACCENT}; padding: {padding};"
 
 
-def label_muted_desc(*, size: int = 11, indent: int = 0) -> str:
-    return f"color: {COLOR_TEXT_MUTED}; font-size: {size}px; padding-left: {indent}px;"
+def label_muted_desc(*, size: int = 10, indent: int = 0) -> str:
+    return f"color: {COLOR_TEXT_MUTED}; font-size: {size}pt; padding-left: {indent}px;"
 
 
-def label_stat_value(color: str, *, size: int = 14) -> str:
-    return f"color: {color}; font-size: {size}px; font-weight: bold;"
+def label_stat_value(color: str, *, size: int = 13) -> str:
+    return f"color: {color}; font-size: {size}pt; font-weight: bold;"
 
 
-def label_stat_title(*, size: int = 11) -> str:
-    return f"color: {COLOR_TEXT_DIM}; font-size: {size}px; font-weight: bold;"
+def label_stat_title(*, size: int = 10) -> str:
+    return f"color: {COLOR_TEXT_DIM}; font-size: {size}pt; font-weight: bold;"
 
 
 def money_input_style(color: str) -> str:
@@ -471,14 +535,14 @@ def money_input_style(color: str) -> str:
         QLineEdit {{
             background-color: #252525; color: {color};
             border: 1px solid #444444; padding: 4px 8px;
-            border-radius: 4px; font-size: 16px; font-weight: bold;
+            border-radius: 4px; font-size: 14pt; font-weight: bold;
         }}
         QLineEdit:focus {{ border: 1px solid {color}; }}
     """
 
 
 def payment_status_style(color: str) -> str:
-    return f"color: {color}; font-size: 12px; font-weight: bold;"
+    return f"color: {color}; font-size: 11pt; font-weight: bold;"
 
 
 def deadline_date_edit_style(
@@ -492,7 +556,7 @@ def deadline_date_edit_style(
     return f"""
         QDateEdit {{
             color: {text}; padding: 4px 6px; border-radius: 3px;
-            font-size: 14px; font-weight: bold;
+            font-size: 13pt; font-weight: bold;
             background-color: {bg}; border: 1px solid {border};
         }}
         {dropdown}
@@ -506,7 +570,7 @@ def status_bar_message(*, error: bool = False, saved: bool = False) -> str:
         color = COLOR_SUCCESS
     else:
         color = "#888888"
-    return f"QStatusBar {{ color: {color}; background: transparent; font-size: 11px; }}"
+    return f"QStatusBar {{ color: {color}; background: transparent; font-size: 10pt; }}"
 
 
 def create_dark_palette() -> QPalette:

@@ -71,7 +71,7 @@ def load_eula_html(
         candidates.append(Path(resources_dir) / _EULA_HTML_NAME)
     candidates.append(Path("resources") / _EULA_HTML_NAME)
     # Поддержка frozen-exe
-    meipass = getattr(sys, "_MEIPASS", None) if "sys" in dir() else None
+    meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         candidates.append(Path(meipass) / "resources" / _EULA_HTML_NAME)
 

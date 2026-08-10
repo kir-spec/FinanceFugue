@@ -3,7 +3,7 @@ from datetime import datetime
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
-    QLineEdit, QFrame, QCheckBox, QDateEdit, QSizePolicy,
+    QLineEdit, QFrame, QCheckBox, QDateEdit, QSizePolicy, QMessageBox,
 )
 from PySide6.QtCore import Qt
 
@@ -23,6 +23,7 @@ from ..theme import (
     ORDER_STATUS_CHECKBOX_STYLE,
     ORDER_TITLE_STYLE,
     ORDER_TOGGLE_BTN_STYLE,
+    ORDER_ARCHIVE_BTN_STYLE,
     PAYMENT_ADD_BTN_STYLE,
     PAYMENT_HISTORY_BTN_STYLE,
     PAYMENTS_FRAME_STYLE,
@@ -49,6 +50,25 @@ class OrderWidget(OrderFinancialMixin, OrderFilesMixin, QFrame):
         self.setAcceptDrops(True)  # Разрешаем drag and drop
         self.init_ui()
 
+    def archive_order(self):
+        answer = QMessageBox.question(
+            self,
+            "Архивация заказа",
+            "Вы уверены, что хотите отправить этот заказ в архив?\nОн исчезнет из текущего списка, но останется в исторической базе.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            client = next((c for c in self._bridge.clients if self.order in c.orders), None)
+            if client:
+                self._bridge.archive_order(client, self.order)
+
+    def update_order_status(self):
+        new_status = "Завершен" if self.status_cb.isChecked() else "В работе"
+        self.order.status = new_status
+        self.archive_btn.setVisible(new_status == "Завершен")
+        self._bridge.request_profile_refresh()
+        self._bridge.request_save()
+
     def init_ui(self):
         self.setStyleSheet(ORDER_FRAME_STYLE)
         self.setObjectName("OrderCard")
@@ -60,7 +80,7 @@ class OrderWidget(OrderFinancialMixin, OrderFilesMixin, QFrame):
         header = QHBoxLayout()
         
         # Явная стрелка для сворачивания - СЛЕВА
-        self.toggle_btn = QPushButton("▶")
+        self.toggle_btn = QPushButton("▼")
         self.toggle_btn.setFixedSize(24, 24)
         self.toggle_btn.clicked.connect(self.toggle_contents)
         self.toggle_btn.setStyleSheet(ORDER_TOGGLE_BTN_STYLE)
@@ -69,8 +89,7 @@ class OrderWidget(OrderFinancialMixin, OrderFilesMixin, QFrame):
         title.setStyleSheet(ORDER_TITLE_STYLE)
         
         # Кнопка удаления заказа - СЕРАЯ
-        self.delete_btn = QPushButton("Удалить")
-        self.delete_btn.setFixedWidth(70)
+        self.delete_btn = QPushButton("🗑 В корзину")
         self.delete_btn.clicked.connect(self.delete_order)
         self.delete_btn.setStyleSheet(ORDER_DELETE_BTN_STYLE)
 
@@ -80,10 +99,17 @@ class OrderWidget(OrderFinancialMixin, OrderFilesMixin, QFrame):
         self.status_cb.stateChanged.connect(self.update_order_status)
         self.status_cb.setStyleSheet(ORDER_STATUS_CHECKBOX_STYLE)
 
+        # Кнопка архивации
+        self.archive_btn = QPushButton("📦 В архив")
+        self.archive_btn.clicked.connect(self.archive_order)
+        self.archive_btn.setStyleSheet(ORDER_ARCHIVE_BTN_STYLE)
+        self.archive_btn.setVisible(self.order.status == "Завершен")
+
         header.addWidget(self.toggle_btn)
         header.addWidget(title)
         header.addSpacing(10)
         header.addWidget(self.status_cb)
+        header.addWidget(self.archive_btn)
         header.addWidget(self.delete_btn)
         header.addStretch()
         self.main_layout.addLayout(header)
@@ -358,5 +384,5 @@ class OrderWidget(OrderFinancialMixin, OrderFilesMixin, QFrame):
     def toggle_contents(self):
         visible = self.content.isVisible()
         self.content.setVisible(not visible)
-        # Меняем стрелочку в зависимости от состояния
-        self.toggle_btn.setText("▲" if visible else "▼")
+        # ▶ = свёрнуто, ▼ = развёрнуто
+        self.toggle_btn.setText("▶" if visible else "▼")

@@ -7,7 +7,7 @@ import traceback
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, Callable, Optional
 
 from PySide6.QtCore import QObject, QRunnable, Signal
 
@@ -18,8 +18,9 @@ from ..utils.path_safety import sanitize_path_component, is_path_within
 logger = logging.getLogger("Backup")
 
 
-def backup_settings_file(    settings: dict,
-    backup_dir: str = None,
+def backup_settings_file(
+    settings: dict,
+    backup_dir: Optional[str] = None,
     keep: int = 5,
 ) -> Path:
     if backup_dir is None:
@@ -46,7 +47,7 @@ def create_full_backup_zip(
     database_path: Path,
     clients: List[Client],
     *,
-    on_progress: "callable | None" = None,
+    on_progress: Optional[Callable[[int, int], None]] = None,
 ) -> int:
     """Создаёт полный ZIP-бэкап БД + файлов клиентов.
 

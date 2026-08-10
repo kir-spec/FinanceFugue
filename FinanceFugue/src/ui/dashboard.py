@@ -8,6 +8,18 @@ from ..theme import TRANSPARENT_FRAME_STYLE, label_stat_title, label_stat_value
 def create_stat_widget(title: str, value: str, color: str) -> QFrame:
     widget = QFrame()
     widget.setStyleSheet(TRANSPARENT_FRAME_STYLE)
+    
+    # Подсказки для глобальной статистики
+    tooltips = {
+        "В РАБОТЕ": "Количество активных (не завершенных) заказов",
+        "ВЫПОЛНЕНО": "Количество успешно завершенных заказов",
+        "АВАНСЫ": "Общая сумма полученных авансов по активным заказам",
+        "ДОЛГИ": "Общая сумма задолженностей от клиентов",
+        "КАССА": "Общая сумма всех полученных платежей (авансы + оплата)"
+    }
+    if title in tooltips:
+        widget.setToolTip(tooltips[title])
+        
     layout = QVBoxLayout(widget)
     layout.setContentsMargins(10, 5, 10, 5)
     layout.setSpacing(2)
@@ -34,15 +46,16 @@ def create_client_stats_widget(stats: dict) -> QFrame:
     layout.setContentsMargins(0, 0, 0, 0)
 
     stat_items = [
-        ("ВСЕГО", str(stats["total_orders"]), "#00D1FF"),
-        ("ГОТОВО", str(stats["completed_orders"]), "#28A745"),
-        ("АВАНС", stats["advance_display"], "#FFD700"),
-        ("ВНЕСЕНО", stats["received_display"], "#28A745"),
-        ("ДОЛГ", stats["debt_display"], "#FF4B2B" if stats["total_debt"] > 0 else "#28A745"),
+        ("ВСЕГО", str(stats["total_orders"]), "#00D1FF", "Всего заказов у данного клиента"),
+        ("ГОТОВО", str(stats["completed_orders"]), "#28A745", "Выполненные заказы клиента"),
+        ("АВАНС", stats["advance_display"], "#FFD700", "Сумма авансов по заказам в работе"),
+        ("ВНЕСЕНО", stats["received_display"], "#28A745", "Общая сумма оплат от клиента"),
+        ("ДОЛГ", stats["debt_display"], "#FF4B2B" if stats["total_debt"] > 0 else "#28A745", "Текущий долг клиента"),
     ]
 
-    for title, value, color in stat_items:
+    for title, value, color, tooltip in stat_items:
         stat_widget = QWidget()
+        stat_widget.setToolTip(tooltip)
         stat_layout = QVBoxLayout(stat_widget)
         stat_layout.setContentsMargins(0, 0, 0, 0)
         stat_layout.setSpacing(2)
@@ -59,3 +72,4 @@ def create_client_stats_widget(stats: dict) -> QFrame:
 
     layout.addStretch()
     return widget
+

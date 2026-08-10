@@ -72,6 +72,7 @@ def _parse_clients_list(data: list) -> List[Client]:
                     created_at=o.get("created_at", "") or "",
                     deadline=o.get("deadline", "") or "",
                     status=o.get("status", "В работе") or "В работе",
+                    is_deleted=o.get("is_deleted", False),
                     files=files,
                     payments=payments,
                 )
@@ -83,6 +84,8 @@ def _parse_clients_list(data: list) -> List[Client]:
                 name=c_dict["name"],
                 email=c_dict.get("email", ""),
                 social_link=c_dict.get("social_link", ""),
+                avatar_path=c_dict.get("avatar_path", ""),
+                is_deleted=c_dict.get("is_deleted", False),
                 notes=c_dict.get("notes", ""),
                 orders=orders,
             )
@@ -129,7 +132,6 @@ class CRMStorage:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             clients_data = []
             for c in clients:
-                c_dict = asdict(c)
                 orders_data = []
                 for order in c.orders:
                     order_dict = {
@@ -141,11 +143,21 @@ class CRMStorage:
                         "created_at": order.created_at,
                         "deadline": order.deadline,
                         "status": order.status,
+                        "is_deleted": order.is_deleted,
                         "files": [asdict(f) for f in order.files],
                         "payments": [p.to_dict() for p in order.payments],
                     }
                     orders_data.append(order_dict)
-                c_dict["orders"] = orders_data
+                c_dict = {
+                    "id": c.id,
+                    "name": c.name,
+                    "email": c.email,
+                    "social_link": c.social_link,
+                    "avatar_path": c.avatar_path,
+                    "is_deleted": c.is_deleted,
+                    "notes": c.notes,
+                    "orders": orders_data,
+                }
                 clients_data.append(c_dict)
 
             envelope = {"schema_version": SCHEMA_VERSION, "clients": clients_data}

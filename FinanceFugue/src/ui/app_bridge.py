@@ -51,9 +51,30 @@ class AppBridge(QObject):
         self._window.export_client_orders()
 
     def remove_client(self, client: Client) -> None:
-        if client in self._window.clients:
-            self._window.clients.remove(client)
+        client.is_deleted = True
         self._window.current_client = None
         self._window.clear_profile_layout()
         self._window.refresh_list()
         self.request_save()
+
+    def archive_order(self, client: Client, order) -> bool:
+        success = self._window.archive_manager.archive_order(self.clients, client.id, order.id)
+        if success:
+            self.request_profile_refresh()
+            self._window.refresh_list()
+        return success
+
+    def archive_completed_orders(self, client: Client) -> int:
+        count = self._window.archive_manager.archive_completed_orders(self.clients, client.id)
+        if count > 0:
+            self.request_profile_refresh()
+            self._window.refresh_list()
+        return count
+
+    def archive_client(self, client: Client) -> bool:
+        success = self._window.archive_manager.archive_client(self.clients, client.id)
+        if success:
+            self._window.current_client = None
+            self._window.clear_profile_layout()
+            self._window.refresh_list()
+        return success

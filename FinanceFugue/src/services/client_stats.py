@@ -1,5 +1,6 @@
 """Расчёт статистики по клиентам и заказам."""
-from typing import List
+from typing import List, Optional
+from datetime import datetime
 
 from ..models import Client
 from .currency import format_multi_currency, has_outstanding_debt, sum_by_currency
@@ -30,19 +31,45 @@ def calculate_client_stats(client: Client) -> dict:
     }
 
 
-def calculate_global_dashboard(clients: List[Client]) -> list[tuple[str, str, str]]:
+def calculate_global_dashboard(
+    clients: List[Client], 
+    archive_clients: Optional[List[Client]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None
+) -> list[tuple[str, str, str]]:
+    
     in_work, done = 0, 0
-    all_orders = [o for c in clients for o in c.orders]
-    advance_by = sum_by_currency(all_orders, field="advance")
-    debt_by = sum_by_currency(all_orders, field="debt", active_only=True)
-    cash_by = sum_by_currency(all_orders, field="total_received")
-
-    for client in clients:
+    all_clients = clients + (archive_clients or [])
+    all_orders = []
+    
+    for client in all_clients:
         for order in client.orders:
+            # Парсинг даты заказа
+            order_date = None
+            if order.created_at:
+                try:
+                    order_date = datetime.strptime(order.created_at.split()[0], "%d.%m.%Y")
+                except ValueError:
+                    pass
+            
+            # Фильтрация по дате
+            if start_date and order_date:
+                if order_date.date() < start_date.date():
+                    continue
+            if end_date and order_date:
+                if order_date.date() > end_date.date():
+                    continue
+                    
+            all_orders.append(order)
+
             if order.status == "Завершен":
                 done += 1
             else:
                 in_work += 1
+
+    advance_by = sum_by_currency(all_orders, field="advance")
+    debt_by = sum_by_currency(all_orders, field="debt", active_only=True)
+    cash_by = sum_by_currency(all_orders, field="total_received")
 
     return [
         ("📋 В РАБОТЕ", str(in_work), "#00D1FF"),

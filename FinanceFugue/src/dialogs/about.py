@@ -15,7 +15,8 @@ from PySide6.QtWidgets import (
     QTextBrowser, QPushButton, QWidget,
 )
 
-from .. import APP_NAME, VERSION, VERSION_DATE, COMPANY, COPYRIGHT_HOLDER, SUPPORT_EMAIL
+from .. import APP_NAME, VERSION_DATE, COMPANY, COPYRIGHT_HOLDER, SUPPORT_EMAIL
+from .. import __version_semver__
 from ..services.eula_renderer import load_eula_html
 from ..theme import ABOUT_DIALOG_STYLESHEET, label_accent
 from ..utils.paths import resource_path
@@ -74,6 +75,21 @@ class AboutDialog(QDialog):
     def _about_tab(self) -> QWidget:
         widget = QWidget()
         v = QVBoxLayout(widget)
+
+        # Логотип
+        logo_path = resource_path("images/FinanceFugue.jpg")
+        if logo_path.exists():
+            from PySide6.QtGui import QPixmap
+            logo_label = QLabel()
+            pixmap = QPixmap(str(logo_path)).scaled(
+                120, 120,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            logo_label.setPixmap(pixmap)
+            logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            v.addWidget(logo_label)
+
         title = QLabel(f"{APP_NAME} {VERSION_DATE}")
         title.setStyleSheet(label_accent(size=20))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -82,7 +98,7 @@ class AboutDialog(QDialog):
         info = QLabel(
             f"<p><b>{COMPANY}</b><br>"
             f"© {COPYRIGHT_HOLDER}, 2026. Все права защищены.</p>"
-            f"<p><b>Версия:</b> {VERSION_DATE} (SemVer {VERSION})</p>"
+            f"<p><b>Версия:</b> {VERSION_DATE} (SemVer {__version_semver__})</p>"
             f"<p><b>Назначение:</b> локальная настольная CRM "
             f"(учёт клиентов, заказов, платежей и файлов).</p>"
             f"<p><b>Данные:</b> хранятся <i>исключительно</i> на устройстве "

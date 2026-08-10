@@ -20,9 +20,9 @@ from ....models import Order
 from ....logger import get_logger
 from ....theme import (
     CANCEL_DIALOG_BUTTON_STYLE,
+    CREATE_ORDER_BUTTON_STYLE,
     DATE_EDIT_STYLE,
     NEW_ORDER_DIALOG_STYLESHEET,
-    SUCCESS_DIALOG_BUTTON_STYLE,
 )
 
 logger = get_logger("MainWindow")
@@ -60,6 +60,9 @@ class OrdersMixin:
 
         service_label = QLabel("Тип услуги:")
         service_combo = QComboBox()
+        service_combo.setEditable(True)
+        service_combo.lineEdit().setPlaceholderText("Например: Написание партитуры")
+        service_combo.lineEdit().setMaxLength(100)
         service_combo.addItems(
             [
                 "Монтаж звука",
@@ -70,12 +73,23 @@ class OrdersMixin:
                 "Аранжировка",
                 "Мастеринг",
                 "Консультация",
+                "✍️ Написать свой вариант...",
             ]
         )
+        
+        def on_service_selected(text):
+            if text == "✍️ Написать свой вариант...":
+                service_combo.setCurrentText("")
+                service_combo.lineEdit().setFocus()
+                
+        service_combo.currentTextChanged.connect(on_service_selected)
+        service_combo.setCurrentIndex(-1)
+        service_combo.setCurrentText("") # Явно очищаем текст, чтобы появился плейсхолдер
         form_layout.addRow(service_label, service_combo)
 
         price_layout = QHBoxLayout()
         price_edit = QLineEdit("0")
+        price_edit.setMaxLength(20)
 
         currency_combo = QComboBox()
         currency_combo.addItems(["RUB", "USD", "EUR", "UAH"])
@@ -102,18 +116,17 @@ class OrdersMixin:
 
         advance_label = QLabel("Аванс:")
         advance_edit = QLineEdit("0")
+        advance_edit.setMaxLength(20)
         finance_layout.addRow(advance_label, advance_edit)
 
         layout.addWidget(finance_group)
         layout.addStretch()
 
         buttons = QHBoxLayout()
-        create_btn = QPushButton("Создать заказ")
-        create_btn.setFixedWidth(140)
-        create_btn.setStyleSheet(SUCCESS_DIALOG_BUTTON_STYLE)
+        create_btn = QPushButton("✅ Создать заказ")
+        create_btn.setStyleSheet(CREATE_ORDER_BUTTON_STYLE)
 
         cancel_btn = QPushButton("Отмена")
-        cancel_btn.setFixedWidth(100)
         cancel_btn.setStyleSheet(CANCEL_DIALOG_BUTTON_STYLE)
 
         buttons.addWidget(create_btn)

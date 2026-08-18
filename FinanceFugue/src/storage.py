@@ -9,7 +9,7 @@ from typing import Any, List
 
 from .models import Client, Order, Payment, ProjectFile
 from .services.crypto import DatabaseCrypto, InvalidPasswordError
-from .services.schema import SCHEMA_VERSION
+from .services.schema import SCHEMA_VERSION, migrate_client, migrate_order
 
 logger = logging.getLogger("Storage")
 
@@ -44,12 +44,18 @@ def _parse_clients_list(data: list) -> List[Client]:
         if not c_dict.get("name"):
             raise ValueError("У клиента отсутствует обязательное поле name")
 
+        # Миграция: заполнить поля клиента, отсутствующие в старых версиях БД.
+        migrate_client(c_dict)
+
         orders = []
         for o in c_dict.get("orders", []):
             if not isinstance(o, dict):
                 raise ValueError("Элемент заказа должен быть объектом")
             if not o.get("id"):
                 raise ValueError("У заказа отсутствует обязательное поле id")
+
+            # Миграция: заполнить поля заказа, отсутствующие в старых версиях БД.
+            migrate_order(o)
 
             files = [ProjectFile(**fi) for fi in o.get("files", [])]
             payments = []
@@ -96,15 +102,32 @@ def _parse_clients_list(data: list) -> List[Client]:
 
 
 def _extract_clients_payload(data: Any) -> list:
-    """Поддержка legacy (массив) и нового формата {schema_version, clients}."""
+    """Поддержка legacy (массив) и нового формата {schema_version, clients}.
+
+    Версии схемы:
+    - ``1`` (текущая, совместима с legacy-массивом): все поля опциональны,
+      отсутствующие поля получают значения по умолчанию при парсинге.
+    - Версии > ``SCHEMA_VERSION`` отклоняются — файл создан новее этой сборки.
+    """
     if isinstance(data, list):
+        # Legacy-формат: просто массив клиентов (эквивалент schema_version=1).
         return data
     if isinstance(data, dict) and "clients" in data:
-        version = data.get("schema_version", 1)
+        raw_version = data.get("schema_version", 1)
+        try:
+            version = int(raw_version)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Неверный тип schema_version: {raw_version!r} (ожидается целое число)"
+            )
+        if version < 1:
+            raise ValueError(f"Недопустимая schema_version: {version}")
         if version > SCHEMA_VERSION:
             raise ValueError(
-                f"Версия схемы {version} новее поддерживаемой ({SCHEMA_VERSION})"
+                f"Версия схемы {version} новее поддерживаемой ({SCHEMA_VERSION}). "
+                "Обновите приложение."
             )
+        # version == 1 (единственная поддерживаемая): читаем как есть.
         clients = data["clients"]
         if not isinstance(clients, list):
             raise ValueError("Поле clients должно быть массивом")

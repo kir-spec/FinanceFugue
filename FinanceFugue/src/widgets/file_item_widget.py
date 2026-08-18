@@ -142,18 +142,27 @@ class FileItemWidget(QWidget):
 
             # Защита от symlink-атак: если путь — symlink,
             # резолвим и проверяем, что цель не ушла за пределы
-            # ожидаемой зоны (директория файла из БД).
+            # директории attached_files (или директории самого файла,
+            # если attached_files недоступна).
             try:
                 if os.path.islink(path):
-                    expected_dir = os.path.dirname(path) or "."
-                    if not is_path_within(path, expected_dir):
+                    # Предпочтительный safe root — папка attached_files рядом с БД.
+                    db_dir = self._bridge.app_settings.get(
+                        "database_path", self._bridge.storage_db_dir()
+                    )
+                    safe_root = os.path.join(db_dir, "attached_files")
+                    if not os.path.isdir(safe_root):
+                        # fallback: только директория самого файла
+                        safe_root = os.path.dirname(path) or "."
+                    if not is_path_within(path, safe_root):
                         QMessageBox.warning(
                             self, "Небезопасный путь",
                             f"Файл '{self.file_obj.name}' является символической ссылкой\n"
                             f"за пределы ожидаемой директории. Открытие заблокировано.",
                         )
                         logger.warning(
-                            "Отклонён symlink при открытии: %s", path
+                            "Отклонён symlink при открытии: %s (safe_root=%s)",
+                            path, safe_root,
                         )
                         return
             except OSError as e:

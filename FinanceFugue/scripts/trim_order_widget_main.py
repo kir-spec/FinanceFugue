@@ -1,4 +1,11 @@
-"""Keep OrderWidget init_ui + toggle_contents only."""
+"""Keep OrderWidget init_ui + toggle_contents only.
+
+.. warning::
+    Этот скрипт был **уже применён** во время рефакторинга.
+    Результат уже находится в ``src/widgets/order_widget.py``.
+    **Не запускайте повторно** — он удалит методы из order_widget.py,
+    которые, возможно, были изменены с момента первого запуска.
+"""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]

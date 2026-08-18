@@ -1,4 +1,11 @@
-"""One-time extractor: order_widget methods -> mixins."""
+"""One-time extractor: order_widget methods -> mixins.
+
+.. warning::
+    Этот скрипт был **уже применён** во время рефакторинга.
+    Результат (миксины) уже находятся в ``src/widgets/``.
+    **Не запускайте повторно** — он перезапишет уже актуальные
+    файлы миксинов старыми версиями из ``order_widget.py``.
+"""
 import re
 from pathlib import Path
 

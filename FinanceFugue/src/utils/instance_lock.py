@@ -4,6 +4,8 @@ import os
 import sys
 from pathlib import Path
 
+__all__ = ["InstanceLock", "InstanceLockError"]
+
 
 class InstanceLockError(Exception):
     pass
@@ -64,6 +66,21 @@ def _clear_lock(lock_path: Path) -> None:
 
 
 class InstanceLock:
+    """Блокировка единственного экземпляра на основе файла.
+
+    Механизм:
+    - **Windows**: ``msvcrt.locking`` (LK_NBLCK) на первый байт lock-файла.
+    - **POSIX**: ``fcntl.flock`` (LOCK_EX | LOCK_NB).
+
+    Ограничения:
+    - **Сетевые FS (NFS, SMB/CIFS)**: flock и msvcrt.locking не гарантируют
+      взаимного исключения между разными хостами. Не используйте общую базу
+      одновременно с нескольких машин — блокировка не защитит данные.
+    - Рассчитана на сценарий: **одна машина, один пользователь, одна база**.
+    - Stale lock (PID мёртвого процесса) обнаруживается и очищается
+      автоматически при следующем запуске.
+    """
+
     def __init__(self, lock_path: Path):
         self._path = lock_path
         self._file = None

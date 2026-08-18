@@ -24,19 +24,31 @@ logger = get_logger("MainWindow")
 
 class DatabaseOpsMixin:
     def rebind_storage(self, database_folder: str, *, reload_clients: bool = True) -> None:
-        """Переназначает путь к БД и блокировку экземпляра (release → new path → acquire)."""
-        new_db_path = Path(database_folder) / "pro_database.json"
+        """Переназначает путь к БД и блокировку экземпляра.
 
+        Порядок: **сначала захватить новый lock, потом отпустить старый**.
+        Это исключает окно гонки, в котором другой экземпляр мог бы
+        захватить ещё не занятый lock нового пути.
+
+        При ошибке `acquire` нового lock старый остаётся активным,
+        состояние приложения не изменяется.
+        """
+        new_db_path = Path(database_folder) / "pro_database.json"
+        new_lock = InstanceLock(new_db_path.with_suffix(".lock"))
+
+        # Атомарная смена: захватываем новый ДО снятия старого.
+        try:
+            new_lock.acquire()
+        except InstanceLockError as e:
+            QMessageBox.critical(self, APP_NAME, str(e))
+            raise
+
+        # Старый lock отпускаем только после успешного acquire нового.
         if hasattr(self, "_instance_lock") and self._instance_lock is not None:
             self._instance_lock.release()
 
         self.storage = CRMStorage(str(new_db_path))
-        self._instance_lock = InstanceLock(self.storage.path.with_suffix(".lock"))
-        try:
-            self._instance_lock.acquire()
-        except InstanceLockError as e:
-            QMessageBox.critical(self, APP_NAME, str(e))
-            raise
+        self._instance_lock = new_lock
 
         if reload_clients:
             try:
@@ -445,17 +457,36 @@ class DatabaseOpsMixin:
             if warn_box.clickedButton() != btn_yes:
                 return
 
-        if delete_files_disk:
-            if os.path.exists(attached_files_dir):
-                try:
-                    shutil.rmtree(attached_files_dir)
-                except Exception as e:
-                    logger.error("Ошибка удаления папки файлов: %s", e)
+        # --- Snapshot для rollback при ошибке записи ---
+        clients_snapshot = self.clients
+        prev_client = self.current_client
 
         self.clients = []
         self.current_client = None
 
-        self.save_db()
+        try:
+            self.save_db()
+        except Exception as e:
+            # Откат: диск не изменён (save_db пишет в .tmp и только потом заменяет),
+            # возвращаем in-memory состояние.
+            self.clients = clients_snapshot
+            self.current_client = prev_client
+            logger.error("delete_database_full: сбой сохранения, откат: %s", e)
+            QMessageBox.critical(
+                self, "Ошибка",
+                f"Не удалось очистить базу данных:\n{e}\n\nДанные восстановлены.",
+            )
+            return
+
+        if delete_files_disk and os.path.exists(attached_files_dir):
+            try:
+                shutil.rmtree(attached_files_dir)
+            except Exception as e:
+                logger.error("Ошибка удаления папки файлов: %s", e)
+                QMessageBox.warning(
+                    self, "Предупреждение",
+                    f"База очищена, но не удалось удалить файлы с диска:\n{e}",
+                )
 
         self.refresh_list()
         self.clear_profile_layout()
@@ -468,3 +499,4 @@ class DatabaseOpsMixin:
             msg += "\nФайлы на диске остались нетронутыми."
 
         QMessageBox.information(self, "Успех", msg)
+

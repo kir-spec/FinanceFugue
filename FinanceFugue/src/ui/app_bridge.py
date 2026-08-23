@@ -71,6 +71,15 @@ class AppBridge(QObject):
             self._window.refresh_list()
         return count
 
+    @property
+    def archive_manager(self):
+        return getattr(self._window, "archive_manager", None)
+
+    def get_archive_clients(self):
+        if hasattr(self._window, "archive_manager"):
+            return self._window.archive_manager.get_archive_clients()
+        return []
+
     def archive_client(self, client: Client) -> bool:
         success = self._window.archive_manager.archive_client(self.clients, client.id)
         if success:

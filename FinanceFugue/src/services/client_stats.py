@@ -7,12 +7,13 @@ from .currency import format_multi_currency, has_outstanding_debt, sum_by_curren
 
 
 def calculate_client_stats(client: Client) -> dict:
-    total_orders = len(client.orders)
-    completed_orders = sum(1 for o in client.orders if o.status == "Завершен")
-    advance_by = sum_by_currency(client.orders, field="advance")
-    received_by = sum_by_currency(client.orders, field="total_received")
+    active_orders = [o for o in client.orders if not getattr(o, "is_deleted", False)]
+    total_orders = len(active_orders)
+    completed_orders = sum(1 for o in active_orders if o.status == "Завершен")
+    advance_by = sum_by_currency(active_orders, field="advance")
+    received_by = sum_by_currency(active_orders, field="total_received")
     debt_by = sum_by_currency(
-        client.orders,
+        active_orders,
         field="debt",
         active_only=True,
     )
@@ -39,11 +40,14 @@ def calculate_global_dashboard(
 ) -> list[tuple[str, str, str]]:
     
     in_work, done = 0, 0
-    all_clients = clients + (archive_clients or [])
+    active_clients = [c for c in clients if not getattr(c, "is_deleted", False)]
+    all_clients = active_clients + (archive_clients or [])
     all_orders = []
     
     for client in all_clients:
         for order in client.orders:
+            if getattr(order, "is_deleted", False):
+                continue
             # Парсинг даты заказа
             order_date = None
             if order.created_at:

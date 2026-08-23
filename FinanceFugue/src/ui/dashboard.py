@@ -5,9 +5,24 @@ from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget, QHBoxLayout
 from ..theme import TRANSPARENT_FRAME_STYLE, label_stat_title, label_stat_value
 
 
-def create_stat_widget(title: str, value: str, color: str) -> QFrame:
+def create_stat_widget(title: str, value: str, color: str, on_click=None) -> QFrame:
     widget = QFrame()
-    widget.setStyleSheet(TRANSPARENT_FRAME_STYLE)
+    if on_click:
+        widget.setStyleSheet("""
+            QFrame {
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 6px;
+            }
+            QFrame:hover {
+                background-color: #2D2D2D;
+                border: 1px solid #4D4D4D;
+            }
+        """)
+        widget.setCursor(Qt.CursorShape.PointingHandCursor)
+        widget.mousePressEvent = lambda e: on_click() if e.button() == Qt.MouseButton.LeftButton else None
+    else:
+        widget.setStyleSheet(TRANSPARENT_FRAME_STYLE)
     
     # Подсказки для глобальной статистики
     tooltips = {
@@ -15,16 +30,19 @@ def create_stat_widget(title: str, value: str, color: str) -> QFrame:
         "ВЫПОЛНЕНО": "Количество успешно завершенных заказов",
         "АВАНСЫ": "Общая сумма полученных авансов по активным заказам",
         "ДОЛГИ": "Общая сумма задолженностей от клиентов",
-        "КАССА": "Общая сумма всех полученных платежей (авансы + оплата)"
+        "КАССА": "Общая сумма всех полученных платежей (нажмите для ручной корректировки кассы)"
     }
-    if title in tooltips:
-        widget.setToolTip(tooltips[title])
+    for k, v in tooltips.items():
+        if k in title:
+            widget.setToolTip(v)
+            break
         
     layout = QVBoxLayout(widget)
     layout.setContentsMargins(10, 5, 10, 5)
     layout.setSpacing(2)
 
-    title_label = QLabel(title)
+    display_title = f"{title} ✏️" if on_click else title
+    title_label = QLabel(display_title)
     title_label.setStyleSheet(label_stat_title())
     title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 

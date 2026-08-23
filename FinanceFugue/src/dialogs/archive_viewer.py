@@ -8,9 +8,24 @@ from ..services.archive import ArchiveManager
 from ..theme import DB_INFO_LABEL_STYLE, MAIN_WINDOW_STYLESHEET
 
 class ArchiveViewerDialog(QDialog):
-    def __init__(self, archive_manager: ArchiveManager, parent=None):
+    def __init__(self, archive_source=None, parent=None):
         super().__init__(parent)
-        self.archive_manager = archive_manager
+        if archive_source is None:
+            from ..storage import CRMStorage
+            self.archive_manager = ArchiveManager(CRMStorage())
+        elif isinstance(archive_source, ArchiveManager):
+            self.archive_manager = archive_source
+        elif hasattr(archive_source, "get_archive_clients"):
+            self.archive_manager = archive_source
+        elif hasattr(archive_source, "archive_manager"):
+            self.archive_manager = archive_source.archive_manager
+        elif hasattr(archive_source, "storage"):
+            self.archive_manager = ArchiveManager(archive_source.storage)
+        elif hasattr(archive_source, "window") and hasattr(archive_source.window, "storage"):
+            self.archive_manager = ArchiveManager(archive_source.window.storage)
+        else:
+            self.archive_manager = ArchiveManager(archive_source)
+
         self.setWindowTitle("🗄 Архив (Холодное хранилище)")
         self.resize(800, 600)
         self.setStyleSheet(MAIN_WINDOW_STYLESHEET)

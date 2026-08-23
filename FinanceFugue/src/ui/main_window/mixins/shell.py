@@ -91,29 +91,56 @@ class ShellMixin:
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        sidebar_header = QHBoxLayout()
+        sidebar_title_row = QHBoxLayout()
         clients_label = QLabel("👤 КЛИЕНТЫ")
         clients_label.setStyleSheet(PANEL_HEADER_STYLE)
-        
-        self.archive_btn = QPushButton("🗄 Архив")
-        self.archive_btn.clicked.connect(self.open_archive)
-        self.archive_btn.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
+        sidebar_title_row.addWidget(clients_label)
+        sidebar_title_row.addStretch()
+        left_layout.addLayout(sidebar_title_row)
+
+        tools_row = QHBoxLayout()
+        tools_row.setSpacing(6)
         
         self.analytics_btn = QPushButton("📊 Аналитика")
+        self.analytics_btn.setToolTip("Финансовая и клиентская аналитика")
         self.analytics_btn.clicked.connect(self.open_analytics)
-        self.analytics_btn.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
+        self.analytics_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2D2D2D; color: #FFFFFF;
+                border: 1px solid #3D3D3D; border-radius: 4px;
+                padding: 6px 4px; font-size: 10pt; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #0078D7; border-color: #0078D7; }
+        """)
+        
+        self.archive_btn = QPushButton("🗄 Архив")
+        self.archive_btn.setToolTip("Архив завершенных заказов")
+        self.archive_btn.clicked.connect(self.open_archive)
+        self.archive_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2D2D2D; color: #FFFFFF;
+                border: 1px solid #3D3D3D; border-radius: 4px;
+                padding: 6px 4px; font-size: 10pt; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #17A2B8; border-color: #17A2B8; }
+        """)
         
         self.recycle_bin_btn = QPushButton("🗑 Корзина")
+        self.recycle_bin_btn.setToolTip("Корзина удаленных клиентов и заказов")
         self.recycle_bin_btn.clicked.connect(self.open_recycle_bin)
-        self.recycle_bin_btn.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
+        self.recycle_bin_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2D2D2D; color: #FFFFFF;
+                border: 1px solid #3D3D3D; border-radius: 4px;
+                padding: 6px 4px; font-size: 10pt; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #DC3545; border-color: #DC3545; }
+        """)
         
-        sidebar_header.addWidget(clients_label)
-        sidebar_header.addStretch()
-        sidebar_header.addWidget(self.analytics_btn)
-        sidebar_header.addWidget(self.archive_btn)
-        sidebar_header.addWidget(self.recycle_bin_btn)
-        
-        left_layout.addLayout(sidebar_header)
+        tools_row.addWidget(self.analytics_btn)
+        tools_row.addWidget(self.archive_btn)
+        tools_row.addWidget(self.recycle_bin_btn)
+        left_layout.addLayout(tools_row)
 
         self.search_edit = QLineEdit()
         self.search_edit.setToolTip("Быстрый поиск клиента по имени")
@@ -240,7 +267,14 @@ class ShellMixin:
 
     def open_archive(self):
         from ....dialogs import ArchiveViewerDialog
-        dialog = ArchiveViewerDialog(self.bridge)
+        from ....services.archive import ArchiveManager
+        mgr = getattr(self, "archive_manager", None) or ArchiveManager(self.storage)
+        dialog = ArchiveViewerDialog(mgr, self)
+        dialog.exec()
+
+    def open_cash_adjustment(self):
+        from ....dialogs import CashAdjustmentDialog
+        dialog = CashAdjustmentDialog(self, self)
         dialog.exec()
 
     def open_recycle_bin(self):
@@ -348,7 +382,8 @@ class ShellMixin:
             start_date=start_date,
             end_date=end_date
         ):
-            self.dash_layout.addWidget(create_stat_widget(title, value, color))
+            on_click = self.open_cash_adjustment if "КАССА" in title else None
+            self.dash_layout.addWidget(create_stat_widget(title, value, color, on_click=on_click))
 
         self.dash_layout.addStretch()
 

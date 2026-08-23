@@ -49,11 +49,9 @@ class TelegramSyncDialog(QDialog):
         tg_help = QLabel(
             "<i>💡 Как узнать свой Chat ID: откройте финансового бота и нажмите <b>/sync</b> или напишите боту @userinfobot</i>"
         )
-        tg_help.setStyleSheet("font-size: 11px; color: #888888;")
-
         self.token_edit = QLineEdit(self.app_settings.get("telegram_token", DEFAULT_TELEGRAM_BOT_TOKEN))
-        self.token_edit.setPlaceholderText(DEFAULT_TELEGRAM_BOT_TOKEN)
-        self.token_edit.setToolTip("Токен Telegram-бота")
+        self.token_edit.setPlaceholderText("123456789:ABCdefGHIjklMNOpqrSTUvwxYZ")
+        self.token_edit.setToolTip("Токен вашего Telegram-бота (из @BotFather)")
 
         form.addRow("Ваш Telegram Chat ID:", self.chat_id_edit)
         form.addRow("", tg_help)

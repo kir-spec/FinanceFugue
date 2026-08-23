@@ -2,6 +2,9 @@
 
 # 💎 FinanceFugue
 
+### ⚡️ The Next-Generation Local-First CRM & Financial Accounting Ecosystem  
+### ⚡️ Экосистема финансового учета и CRM нового поколения с синхронизацией в Telegram
+
 [![Version](https://img.shields.io/badge/version-23.08.2026-00D1FF.svg?style=for-the-badge)](https://github.com/kir-spec/FinanceFugue/releases/tag/v23.08.2026)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Framework](https://img.shields.io/badge/GUI-PySide6%20(Qt6)-41CD52.svg?style=for-the-badge&logo=qt&logoColor=white)](https://doc.qt.io/qtforpython-6/)
@@ -22,48 +25,54 @@
 
 </div>
 
+## 🌟 Уникальная суперсила: Бесшовная 2-сторонняя синхронизация с Telegram-ботом
+## 🌟 Unique Killer Feature: Seamless 2-Way Real-time Sync with Telegram Bot
+
+```
+ ┌────────────────────────────────────────┐          2-Way Real-time Sync          ┌────────────────────────────────────────┐
+ │          🖥 DESKTOP APP (PC)           │  ◄──────────────────────────────────►  │       📱 TELEGRAM BOT COMPANION        │
+ │  • Local-first private database        │       (Chat ID & Secure Bot API)       │  • Voice & text NLP transactions       │
+ │  • Drag & Drop project files & stems   │                                        │  • Mobile CRM in your pocket           │
+ │  • Multi-currency cashflow dashboard   │                                        │  • Deadline push notifications         │
+ │  • Official PDF invoices & receipts    │                                        │  • Multi-Account Shared DB Linking     │
+ └────────────────────────────────────────┘                                        └────────────────────────────────────────┘
+```
+
+* 🚀 **Управление отовсюду:** Вносите платежи и заказы со смартфона в Telegram на ходу или работайте за большим монитором на ПК — все изменения синхронизируются мгновенно.
+* 🔒 **100% Локальная приватность:** Никаких сторонних закрытых облаков. База данных принадлежит только вам.
+* ☁️ **0 байт нагрузки на сервер (Telegram Cloud CDN):** Файлы проектов хранятся в защищенном облаке Telegram бесплатно и бессрочно.
+* 👥 **Мультиаккаунтная общая база:** Возможность привязать несколько Telegram-аккаунтов (второй телефон, партнер, коллега) к единой базе данных.
+* 🎯 **3 Режима работы:** «👤 Личные финансы» ⇄ «💼 CRM клиентов и заказов» ⇄ «✨ Полный гибридный режим».
+
+---
+
 <br>
 
 <!-- ================================================================= -->
 <!-- 1. ENGLISH SECTION -->
 <!-- ================================================================= -->
 <details open>
-<summary><h2>🇬🇧 English — Overview, Telegram Synergy, Features & Architecture</h2></summary>
+<summary><h2>🇬🇧 English — Complete Overview, Bot Synergy & Documentation</h2></summary>
 <br>
 
 ### 🚀 What is FinanceFugue?
 **FinanceFugue** is a modern, high-performance CRM and financial accounting ecosystem built for freelancers, sound engineers, music producers, creative studios, designers, and independent contractors.
 
-It combines a powerful **Desktop Application (PC)** with an intelligent **Mobile Telegram Bot Companion**, allowing real-time 2-way database synchronization while maintaining absolute data privacy and zero vendor lock-in.
+It bridges the gap between a robust **Desktop Application (PC)** and a smart **Mobile Telegram Bot Companion**, allowing real-time 2-way database synchronization while maintaining absolute data privacy and zero vendor lock-in.
 
 ---
 
-### 📱 Desktop App & Telegram Bot Synergy
-
-```
- ┌──────────────────────────────────────┐          2-Way Real-time Sync          ┌──────────────────────────────────────┐
- │         🖥 DESKTOP APP (PC)          │  ◄──────────────────────────────────►  │       📱 TELEGRAM BOT COMPANION      │
- │  • Local-first private database      │       (Chat ID & Secure Bot API)       │  • Voice & text NLP transactions     │
- │  • Drag & Drop project files         │                                        │  • Instant mobile CRM on the go      │
- │  • Multi-currency cashflow dashboard │                                        │  • Deadline push notifications       │
- │  • Official PDF invoices & receipts  │                                        │  • Telegram Cloud CDN file storage   │
- └──────────────────────────────────────┘                                        └──────────────────────────────────────┘
-```
-
-#### 🔄 How 2-Way Synchronization Works:
-1. **Connect in 10 Seconds:** Open the bot in Telegram and type `/sync`. Copy your personal **Telegram Chat ID**.
+### 📱 How the Telegram Bot Synergy Works:
+1. **Connect in 10 Seconds:** Open the bot in Telegram (`@FinanceFugue_bot`) and type `/sync`. Copy your personal **Telegram Chat ID**.
 2. **Pair with PC:** In the desktop app, click **«📱 Bot / Sync»** on the sidebar, enter your Chat ID, and click **«⚡️ Test Connection»**.
-3. **Seamless Workflows:**
+3. **Automated Workflows:**
    * **Auto-Sync:** Every time you save changes on PC (`Ctrl+S`), the database automatically synchronizes with your bot in the background.
    * **Manual Push / Pull:** Send the PC database to the bot with 1 click, or load the latest changes made in Telegram back into your PC app.
+   * **Multi-Account Linking:** Link multiple Telegram accounts to a single shared database via `/admin` pairing codes.
 
-#### 📁 Smart File Management & Server Quota Protection:
-* **Telegram Cloud CDN (Zero Server Disk Consumption):**  
-  Files, audio tracks, briefs, and deliverables attached to orders via Telegram are stored directly in Telegram's distributed Cloud CDN via `tg_file_id`. This means the VPS host server disk is **never overloaded**, even with gigabytes of heavy audio stems or video assets.
-* **Local PC Storage (Portable Mode):**  
-  On your PC, files are stored locally with auto-healing path relocation and 1-click ZIP archive packaging (`PROJECT_MANIFEST.txt`).
-* **Strict Server Storage Quotas:**  
-  The bot features built-in storage limits (up to 50 MB per file, 500 MB quota, fail-safe free-disk threshold) ensuring 100% server stability.
+#### 📁 Smart File Architecture & Zero Server Disk Usage:
+* **Telegram Cloud CDN:** Files and audio deliverables attached to orders via Telegram are stored directly in Telegram's distributed Cloud CDN via `tg_file_id`, consuming **0 bytes of VPS host server disk**.
+* **Local PC Storage:** On your PC, files are stored locally with auto-healing path relocation and 1-click ZIP archive packaging (`PROJECT_MANIFEST.txt`).
 
 ---
 
@@ -123,7 +132,7 @@ python main_pyside.py
 <!-- 2. RUSSIAN SECTION -->
 <!-- ================================================================= -->
 <details>
-<summary><h2>🇷🇺 Русский — Описание, связка с ботом, возможности и архитектура</h2></summary>
+<summary><h2>🇷🇺 Русский — Полное описание, синхронизация с ботом и документация</h2></summary>
 <br>
 
 ### 🚀 Что такое FinanceFugue?
@@ -133,32 +142,19 @@ python main_pyside.py
 
 ---
 
-### 📱 Связка десктопной программы и Telegram-бота
-
-```
- ┌──────────────────────────────────────┐      2-сторонняя синхронизация         ┌──────────────────────────────────────┐
- │          🖥 ПРОГРАММА НА ПК          │  ◄──────────────────────────────────►  │       📱 ТЕЛЕГРАМ-БОТ ПОМОЩНИК       │
- │  • Локальная база данных (приватность)│       (Chat ID и защищенный Bot API)   │  • Ввод расходов и доходов на ходу   │
- │  • Drag & Drop файлов и проектов     │                                        │  • Мобильная CRM всегда в кармане    │
- │  • Мультивалютная аналитика и касса  │                                        │  • Пуш-напоминания о дедлайнах       │
- │  • Печать PDF-счетов и актов         │                                        │  • Облачное хранилище Telegram CDN   │
- └──────────────────────────────────────┘                                        └──────────────────────────────────────┘
-```
-
-#### 🔄 Как работает двусторонняя синхронизация:
-1. **Подключение за 10 секунд:** Откройте финансового бота в Telegram и отправьте команду `/sync`. Бот покажет ваш персональный **Telegram Chat ID**.
+### 📱 Подробно о связке с Telegram-ботом:
+1. **Подключение за 10 секунд:** Откройте финансового бота в Telegram (`@FinanceFugue_bot`) и отправьте команду `/sync`. Бот покажет ваш персональный **Telegram Chat ID**.
 2. **Привязка к программе:** В программе на ПК нажмите кнопку **«📱 Бот / Синхронизация»** на левой панели, вставьте ваш Chat ID и нажмите **«⚡️ Проверить связь»**.
 3. **Единая база везде:**
    * **Автосинхронизация:** При каждом сохранении на ПК (`Ctrl+S`) база автоматически и незаметно отправляется в бота в фоновом потоке.
    * **Ручной Push / Pull:** Выгружайте актуальные данные из бота в программу или отправляйте базу с ПК в бота в 1 клик.
+   * **Мультиаккаунтное связывание:** Администратор может объединить несколько Telegram-аккаунтов для совместной работы в одной базе данных.
 
-#### 📁 Файлы проектов и защита диска сервера (Квоты):
-* **Облачное хранилище Telegram CDN (0 байт нагрузки на сервер):**  
-  Все файлы, аудиодорожки, брифы и материалы, прикрепляемые к заказам в Telegram, сохраняются напрямую в распределенном облаке Telegram CDN через дескрипторы `tg_file_id`. Это гарантирует, что сервер VPS (даже с ограниченным диском 60 Гб) **никогда не переполнится**, сколько бы тяжелых файлов вы ни передавали!
+#### 📁 Файлы проектов и защита диска сервера:
+* **Облако Telegram CDN (0 байт расхода диска сервера):**  
+  Все файлы, аудиодорожки, брифы и материалы, прикрепляемые к заказам в Telegram, сохраняются напрямую в распределенном облаке Telegram CDN через дескрипторы `tg_file_id`. Диск вашего сервера VPS **никогда не переполнится**.
 * **Локальное хранение на ПК (Portable Mode):**  
   На компьютере файлы хранятся в рабочей директории с поддержкой умного авто-лечения путей и упаковки проекта в ZIP-архив за 1 клик (`PROJECT_MANIFEST.txt`).
-* **Строгие лимиты безопасности:**  
-  В боте активен строгий контроль квот (до 50 МБ на файл, индивидуальные квоты хранилища и автоматическая проверка свободного места на SSD), что обеспечивает абсолютную стабильность работы хостинга.
 
 ---
 
@@ -222,7 +218,7 @@ python main_pyside.py
 <!-- 3. UKRAINIAN SECTION -->
 <!-- ================================================================= -->
 <details>
-<summary><h2>🇺🇦 Українська — Опис, зв'язка з ботом, можливості та архітектура</h2></summary>
+<summary><h2>🇺🇦 Українська — Повний опис, синхронізація з ботом та документація</h2></summary>
 <br>
 
 ### 🚀 Що таке FinanceFugue?
@@ -232,32 +228,19 @@ python main_pyside.py
 
 ---
 
-### 📱 Зв'язка десктопної програми та Telegram-бота
-
-```
- ┌──────────────────────────────────────┐      2-стороння синхронізація          ┌──────────────────────────────────────┐
- │          🖥 ПРОГРАМА НА ПК           │  ◄──────────────────────────────────►  │       📱 ТЕЛЕГРАМ-БОТ ПОМІЧНИК       │
- │  • Локальна база даних (приватність) │       (Chat ID та захищений Bot API)   │  • Введення витрат і доходів на ходу │
- │  • Drag & Drop файлів і проєктів     │                                        │  • Мобільна CRM завжди в кишені      │
- │  • Мультивалютна аналітика та каса   │                                        │  • Пуш-нагадування про дедлайни      │
- │  • Друк PDF-рахунків та актів        │                                        │  • Хмарне сховище Telegram Cloud CDN │
- └──────────────────────────────────────┘                                        └──────────────────────────────────────┘
-```
-
-#### 🔄 Як працює двостороння синхронізація:
-1. **Підключення за 10 секунд:** Відкрийте фінансового бота в Telegram та надішліть команду `/sync`. Бот покаже ваш персональний **Telegram Chat ID**.
+### 📱 Детально про зв'язку з Telegram-ботом:
+1. **Підключення за 10 секунд:** Відкрийте фінансового бота в Telegram (`@FinanceFugue_bot`) та надішліть команду `/sync`. Бот покаже ваш персональний **Telegram Chat ID**.
 2. **Прив'язка до програми:** У програмі на ПК натисніть кнопку **«📱 Бот / Синхронізація»** на лівій панелі, вставте ваш Chat ID та натисніть **«⚡️ Перевірити зв'язок»**.
 3. **Спільна база всюди:**
    * **Автосинхронізація:** Під час кожного збереження на ПК (`Ctrl+S`) база автоматично та непомітно надсилається до бота у фоновому потоці.
    * **Ручний Push / Pull:** Вивантажуйте актуальні дані з бота у програму або надсилайте базу з ПК до бота в 1 клік.
+   * **Мультиакаунтне зв'язування:** Адміністратор може об'єднати кілька Telegram-акаунтів для спільної роботи в єдиній базі даних.
 
-#### 📁 Файли проєктів та захист диска сервера (Квоти):
+#### 📁 Файли проєктів та захист диска сервера:
 * **Хмарне сховище Telegram CDN (0 байт навантаження на сервер):**  
-  Усі файли, аудіодоріжки, брифи та матеріали, прикріплені до замовлень у Telegram, зберігаються безпосередньо в розподіленій хмарі Telegram CDN через дескриптори `tg_file_id`. Це гарантує, що сервер VPS (навіть з обмеженим диском 60 Гб) **ніколи не переповниться**, скільки б великих файлів ви не передавали!
+  Усі файли, аудіодоріжки, брифи та матеріали, прикріплені до замовлень у Telegram, зберігаються безпосередньо в розподіленій хмарі Telegram CDN через дескриптори `tg_file_id`. Сервер VPS **ніколи не переповниться**.
 * **Локальне зберігання на ПК (Portable Mode):**  
   На комп'ютері файли зберігаються в робочій директорії з підтримкою розумного авто-відновлення шляхів та пакування проєкту в ZIP-архів за 1 клік (`PROJECT_MANIFEST.txt`).
-* **Суворі ліміти безпеки:**  
-  У боті діє надійний контроль квот (до 50 МБ на файл, індивідуальні квоти сховища та автоматична перевірка вільного місця на SSD), що забезпечує абсолютну стабільність роботи хостингу.
 
 ---
 

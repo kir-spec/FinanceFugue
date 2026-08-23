@@ -50,6 +50,12 @@ class AppBridge(QObject):
     def export_client_orders(self) -> None:
         self._window.export_client_orders()
 
+    def delete_client(self, client: Client) -> None:
+        if hasattr(self._window, "delete_specific_client"):
+            self._window.delete_specific_client(client)
+        else:
+            self.remove_client(client)
+
     def remove_client(self, client: Client) -> None:
         client.is_deleted = True
         self._window.current_client = None

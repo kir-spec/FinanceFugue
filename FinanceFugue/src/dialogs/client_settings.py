@@ -83,19 +83,11 @@ class ClientSettingsDialog(QDialog):
         layout.addWidget(btns)
 
     def delete_client(self):
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Отправка в корзину")
-        msg_box.setText(f"Отправить клиента '{self.client.name}' в корзину?")
-        msg_box.setInformativeText("Вы сможете восстановить его позже.")
-        msg_box.setIcon(QMessageBox.Icon.Question)
-
-        btn_delete = msg_box.addButton("В корзину", QMessageBox.ButtonRole.YesRole)
-        btn_cancel = msg_box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
-
-        msg_box.exec()
-
-        if msg_box.clickedButton() == btn_delete:
-            logger.info("Удаление клиента: %s (ID: %s)", self.client.name, self.client.id)
+        if hasattr(self._bridge, "delete_client"):
+            self._bridge.delete_client(self.client)
+            if getattr(self.client, "is_deleted", False):
+                self.reject()
+        else:
             self._bridge.remove_client(self.client)
             self.reject()
 

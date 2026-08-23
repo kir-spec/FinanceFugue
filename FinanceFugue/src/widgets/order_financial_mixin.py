@@ -382,25 +382,34 @@ class OrderFinancialMixin:
         if not self.order:
             return
         
-        msg_box = QMessageBox(self._bridge.window)
-        msg_box.setWindowTitle("Отправка в корзину")
-        msg_box.setText(f"Отправить заказ '{self.order.service_type}' в корзину?")
-        msg_box.setInformativeText("Вы сможете восстановить его позже через Корзину заказов.")
-        msg_box.setIcon(QMessageBox.Icon.Question)
+        from ..dialogs import ask_deletion_with_finance_choice, DeletionFinanceChoice
         
-        btn_delete = msg_box.addButton("В корзину", QMessageBox.ButtonRole.YesRole)
-        btn_cancel = msg_box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
+        received_map = {self.order.currency or "RUB": self.order.total_received} if self.order.total_received > 0 else {}
+        debt_map = {self.order.currency or "RUB": self.order.debt} if self.order.debt > 0 else {}
+
+        choice = ask_deletion_with_finance_choice(
+            self._bridge.window,
+            item_type="заказа",
+            item_name=self.order.service_type,
+            total_received_map=received_map,
+            debt_map=debt_map
+        )
+
+        if choice == DeletionFinanceChoice.CANCEL:
+            return
+
+        if choice == DeletionFinanceChoice.KEEP_FINANCES and self.order.total_received > 0:
+            if hasattr(self._bridge.window, "_preserve_income"):
+                self._bridge.window._preserve_income(received_map, f"Заказ «{self.order.service_type}»")
+
+        logger.info("Удаление заказа в корзину: %s (ID: %s)", self.order.service_type, self.order.id)
+        self.order.is_deleted = True
         
-        msg_box.exec()
-        
-        if msg_box.clickedButton() == btn_delete:
-            logger.info("Удаление заказа в корзину: %s (ID: %s)", self.order.service_type, self.order.id)
-            
-            self.order.is_deleted = True
-            
-            # Перерисовываем профиль
-            self._bridge.request_profile_refresh()
-            self._bridge.request_save()
+        # Перерисовываем профиль и обновляем дашборд
+        self._bridge.request_profile_refresh()
+        self._bridge.request_save()
+        if hasattr(self._bridge.window, "update_dash"):
+            self._bridge.window.update_dash()
 
     def generate_pdf_invoice(self):
         """Генерирует PDF-счёт для текущего заказа и открывает его."""

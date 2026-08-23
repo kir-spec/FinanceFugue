@@ -14,6 +14,7 @@ from .analytics_dialog import AnalyticsDialog
 from .cloud_settings import CloudSettingsDialog
 from .telegram_sync_dialog import TelegramSyncDialog
 from .cash_adjustment_dialog import CashAdjustmentDialog
+from .deletion_finance_dialog import DeletionFinanceDialog, DeletionFinanceChoice, ask_deletion_with_finance_choice
 
 __all__ = [
     "PaymentsDialog",
@@ -32,4 +33,7 @@ __all__ = [
     "CloudSettingsDialog",
     "TelegramSyncDialog",
     "CashAdjustmentDialog",
+    "DeletionFinanceDialog",
+    "DeletionFinanceChoice",
+    "ask_deletion_with_finance_choice",
 ]

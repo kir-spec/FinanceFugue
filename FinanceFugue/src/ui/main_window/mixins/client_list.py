@@ -168,20 +168,27 @@ class ClientListMixin:
             QMessageBox.warning(self, "Внимание", "Выберите клиентов для перемещения в корзину.")
             return
 
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Отправка в корзину")
+        from ....dialogs import ask_deletion_with_finance_choice, DeletionFinanceChoice
+        from ....services.currency import sum_by_currency
 
-        if len(target_clients) == 1:
-            msg_box.setText(f"Отправить клиента '{target_clients[0].name}' в корзину?")
-        else:
-            msg_box.setText(f"Отправить {len(target_clients)} клиентов в корзину?")
+        target_orders = [o for c in target_clients for o in c.orders if not getattr(o, "is_deleted", False)]
+        received_by = sum_by_currency(target_orders, field="total_received")
+        debt_by = sum_by_currency(target_orders, field="debt", active_only=True)
 
-        msg_box.setInformativeText("Вы сможете восстановить их позже через раздел 'Корзина'.")
-        msg_box.setIcon(QMessageBox.Icon.Question)
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        item_name = target_clients[0].name if len(target_clients) == 1 else f"{len(target_clients)} клиентов"
+        choice = ask_deletion_with_finance_choice(
+            self,
+            item_type="клиента" if len(target_clients) == 1 else "клиентов",
+            item_name=item_name,
+            total_received_map=received_by,
+            debt_map=debt_by
+        )
 
-        if msg_box.exec() != QMessageBox.StandardButton.Yes:
+        if choice == DeletionFinanceChoice.CANCEL:
             return
+
+        if choice == DeletionFinanceChoice.KEEP_FINANCES:
+            self._preserve_income(received_by, f"Клиент «{item_name}»")
 
         for c in target_clients:
             c.is_deleted = True
@@ -201,6 +208,53 @@ class ClientListMixin:
             return
 
         self.refresh_list()
+        if hasattr(self, "update_dash"):
+            self.update_dash()
+
+    def _preserve_income(self, currency_amounts: dict, source_name: str):
+        """Сохраняет доход от удаленного объекта в кассе как служебную запись"""
+        import uuid
+        from datetime import datetime
+        from ....models import Client, Order, Payment
+        
+        has_positive = any(val > 0.001 for val in currency_amounts.values())
+        if not has_positive:
+            return
+
+        adj_client = next((c for c in self.clients if c.name == "🏛 Корректировки кассы" and not c.is_deleted), None)
+        if not adj_client:
+            adj_client = Client(
+                id=str(uuid.uuid4()),
+                name="🏛 Корректировки кассы",
+                notes="Служебные корректировки баланса и сохраненная выручка",
+                orders=[]
+            )
+            self.clients.append(adj_client)
+
+        for curr, amount in currency_amounts.items():
+            if amount <= 0.001:
+                continue
+            adj_order = next((o for o in adj_client.orders if o.currency.upper() == curr.upper() and not o.is_deleted), None)
+            if not adj_order:
+                adj_order = Order(
+                    id=str(uuid.uuid4()),
+                    service_type=f"Сохраненный доход ({curr})",
+                    price=0.0,
+                    currency=curr,
+                    created_at=datetime.now().strftime("%d.%m.%Y %H:%M"),
+                    status="Завершен",
+                    payments=[]
+                )
+                adj_client.orders.append(adj_order)
+
+            payment = Payment(
+                id=str(uuid.uuid4()),
+                type="корректировка",
+                amount=amount,
+                date=datetime.now().strftime("%d.%m.%Y %H:%M"),
+                note=f"Сохраненный доход от: {source_name}"
+            )
+            adj_order.add_payment(payment)
 
     def add_client(self):
         name, ok = QInputDialog.getText(

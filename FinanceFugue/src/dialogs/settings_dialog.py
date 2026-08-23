@@ -91,6 +91,20 @@ class SettingsDialog(QDialog):
         self.deadline_notify_cb.stateChanged.connect(self._save_deadline_pref)
         settings_layout.addWidget(self.deadline_notify_cb)
         
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem("🌐 Авто (Язык системы / Auto)", "auto")
+        self.lang_combo.addItem("🇬🇧 English", "en")
+        self.lang_combo.addItem("🇷🇺 Русский", "ru")
+        self.lang_combo.addItem("🇺🇦 Українська", "uk")
+        
+        current_saved_lang = self._window.app_settings.get("ui_language", "auto")
+        idx = {"auto": 0, "en": 1, "ru": 2, "uk": 3}.get(current_saved_lang, 0)
+        self.lang_combo.setCurrentIndex(idx)
+        self.lang_combo.currentIndexChanged.connect(self._save_lang_pref)
+        
+        settings_layout.addWidget(QLabel("🌐 Язык интерфейса / Language / Мова:"))
+        settings_layout.addWidget(self.lang_combo)
+
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["🌙 Темная (по умолчанию)", "☀️ Светлая"])
         if self._window.app_settings.get("theme", "dark") == "light":
@@ -162,9 +176,16 @@ class SettingsDialog(QDialog):
         self._save_invoice_prefs()
         super().accept()
 
-    def _save_theme_pref(self, index):
+    def _save_theme_pref(self, index: int):
         theme_val = "light" if index == 1 else "dark"
         self._window.app_settings["theme"] = theme_val
+        self._window.save_settings()
+
+    def _save_lang_pref(self, index: int):
+        from ..services.i18n import set_current_language
+        lang_val = self.lang_combo.currentData()
+        self._window.app_settings["ui_language"] = lang_val
+        set_current_language(lang_val)
         self._window.save_settings()
 
     def _save_invoice_prefs(self):

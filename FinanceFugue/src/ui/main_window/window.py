@@ -123,3 +123,5 @@ class FinanceFugueWindow(
             lambda: self.check_deadline_notifications(popup=False)
         )
         self._deadline_timer.start()
+
+        self.start_telegram_live_sync()

@@ -221,5 +221,37 @@ class TelegramSyncDialog(QDialog):
             QMessageBox.warning(self, "Загрузка из бота", f"Не удалось загрузить базу: {msg}")
 
     def _full_sync(self):
-        """2-сторонняя синхронизация: отправляет текущую базу в бота для немедленной актуализации"""
-        self._push_to_bot()
+        """2-сторонняя синхронизация: push базы ПК, затем pull объединённого снимка из бота."""
+        self._save_settings()
+        chat_id = self.chat_id_edit.text().strip()
+        if not chat_id:
+            QMessageBox.warning(self, "Внимание", "Укажите Telegram Chat ID перед синхронизацией.")
+            return
+
+        try:
+            if hasattr(self.window, "storage") and hasattr(self.window, "clients"):
+                self.window.storage.save(self.window.clients)
+            elif hasattr(self.window, "save_db"):
+                self.window.save_db()
+        except Exception as e:
+            logger.warning("Ошибка предварительного сохранения базы перед синхронизацией: %s", e)
+
+        self._set_busy(True, "⏳ Двусторонняя синхронизация с ботом...")
+        self._log("Отправка базы на ПК и загрузка данных из бота...")
+
+        self.worker = CloudSyncWorker(str(self.window.storage.path), self.app_settings, action="full_sync")
+        self.worker.finished_sync.connect(self._on_full_sync_finished)
+        self.worker.start()
+
+    def _on_full_sync_finished(self, success: bool, msg: str):
+        self._set_busy(False, "✅ Синхронизация завершена" if success else "❌ Ошибка синхронизации")
+        self._log(msg)
+        if success:
+            if hasattr(self.window, "reload_database_after_pull"):
+                self.window.reload_database_after_pull()
+            QMessageBox.information(
+                self, "Синхронизация",
+                f"Данные программы и бота объединены.\n\n{msg}"
+            )
+        else:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось синхронизировать базу: {msg}")

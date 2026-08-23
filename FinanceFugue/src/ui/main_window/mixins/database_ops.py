@@ -126,16 +126,22 @@ class DatabaseOpsMixin:
     def reload_database_after_pull(self):
         """Перезагружает базу данных после успешного скачивания (Pull) из Telegram."""
         try:
+            selected_id = getattr(self.current_client, "id", None)
             self.clients = self.storage.load()
             self.refresh_list()
             self.update_dash()
             if hasattr(self, "db_info_label"):
                 self.db_info_label.setText(f"Клиентов: {len(self.clients)}")
-            if self.clients:
+            if selected_id:
+                found = next((c for c in self.clients if getattr(c, "id", None) == selected_id), None)
+                self.current_client = found or (self.clients[0] if self.clients else None)
+            elif self.clients:
                 self.current_client = self.clients[0]
-                self.render_client_profile()
             else:
                 self.current_client = None
+            if self.current_client:
+                self.render_client_profile()
+            else:
                 self.clear_profile_layout()
             self._set_save_status("Синхронизировано с Telegram")
             self.statusBar().showMessage(f"☁️ База обновлена из Telegram (Клиентов: {len(self.clients)})", 10000)
@@ -143,8 +149,59 @@ class DatabaseOpsMixin:
             logger.error("Ошибка при перезагрузке базы после pull: %s", e, exc_info=True)
             QMessageBox.critical(self, "Ошибка обновления", f"Не удалось перезагрузить данные:\n{e}")
 
-    def trigger_sync(self, force=False):
-        """Запускает фоновую синхронизацию с облаком / ботом."""
+    @staticmethod
+    def _crm_file_signature(db_path: str) -> str:
+        """Отпечаток состава CRM (без служебных полей экспорта), чтобы не дёргать UI зря."""
+        import json
+        path = Path(db_path)
+        if not path.exists():
+            return ""
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return str(path.stat().st_mtime)
+        clients = data.get("clients", data if isinstance(data, list) else [])
+        return json.dumps(clients, ensure_ascii=False, sort_keys=True, default=str)
+
+    def _telegram_ready(self) -> bool:
+        auto_tg = self.app_settings.get("auto_telegram_sync", True)
+        has_tg_chat = bool(self.app_settings.get("telegram_chat_id"))
+        provider = self.app_settings.get("cloud_provider", "none")
+        return bool(has_tg_chat and (auto_tg or provider == "telegram"))
+
+    def _user_is_editing(self) -> bool:
+        from PySide6.QtWidgets import QApplication, QLineEdit, QPlainTextEdit, QTextEdit
+        if QApplication.activeModalWidget() is not None:
+            return True
+        widget = QApplication.focusWidget()
+        return isinstance(widget, (QLineEdit, QTextEdit, QPlainTextEdit))
+
+    def start_telegram_live_sync(self):
+        """Периодический pull свежих данных бота и первичная двусторонняя синхронизация."""
+        from PySide6.QtCore import QTimer
+        if getattr(self, "_tg_pull_timer", None) is not None:
+            return
+        self._tg_pull_timer = QTimer(self)
+        self._tg_pull_timer.setInterval(20 * 1000)
+        self._tg_pull_timer.timeout.connect(self._poll_telegram_bot)
+        self._tg_pull_timer.start()
+        QTimer.singleShot(2500, lambda: self.trigger_sync(force=True, action="full_sync"))
+
+    def _poll_telegram_bot(self):
+        import time
+        if not self._telegram_ready() or self._user_is_editing():
+            return
+        # Не перебивать незавершённый push: watcher должен успеть импортировать.
+        if time.time() - getattr(self, "_last_push_time", 0) < 20:
+            return
+        self.trigger_sync(force=True, action="pull_live")
+
+    def trigger_sync(self, force=False, action=None):
+        """Запускает фоновую синхронизацию с облаком / ботом.
+
+        По умолчанию при сохранении — push (ПК → бот).
+        pull_telegram / full_sync забирают свежие данные бота на ПК.
+        """
         import time
         from ....services.cloud_sync import CloudSyncWorker
 
@@ -155,26 +212,28 @@ class DatabaseOpsMixin:
         if provider == "none" and not (auto_tg and has_tg_chat):
             return
 
-        # Если включена автосинхронизация с ботом — используем telegram как провайдер
         if auto_tg and has_tg_chat and provider == "none":
             self.app_settings["cloud_provider"] = "telegram"
             provider = "telegram"
 
-        # Защита от слишком частых бэкапов (раз в 15 сек при сохранении, если не force)
+        if action is None:
+            action = "push" if provider == "telegram" else "push"
+
         current_time = time.time()
         last_sync = getattr(self, "_last_cloud_sync", 0)
         cooldown = 15 if provider == "telegram" else 180
-        
+
         if not force and (current_time - last_sync) < cooldown:
             return
-            
-        # Не запускаем, если уже крутится воркер
+
         if hasattr(self, "cloud_worker") and self.cloud_worker.isRunning():
             return
-            
+
         self.statusBar().showMessage("☁️ Синхронизация с Telegram-ботом...")
-        
-        self.cloud_worker = CloudSyncWorker(str(self.storage.path), self.app_settings, action="push")
+        self._pending_sync_action = action
+        self._sync_signature_before = self._crm_file_signature(str(self.storage.path))
+
+        self.cloud_worker = CloudSyncWorker(str(self.storage.path), self.app_settings, action=action)
         self.cloud_worker.finished_sync.connect(self._on_sync_finished)
         self.cloud_worker.start()
 
@@ -182,7 +241,15 @@ class DatabaseOpsMixin:
         import time
         if success:
             self._last_cloud_sync = time.time()
-            self.statusBar().showMessage(f"☁️ Синхронизация: {message}", 8000)
+            if not str(message).startswith("Нет новых данных"):
+                self.statusBar().showMessage(f"☁️ Синхронизация: {message}", 8000)
+            action = getattr(self, "_pending_sync_action", "push")
+            if action == "push":
+                self._last_push_time = time.time()
+            if action in ("pull_telegram", "pull_live", "full_sync"):
+                after = self._crm_file_signature(str(self.storage.path))
+                if after != getattr(self, "_sync_signature_before", after):
+                    self.reload_database_after_pull()
         else:
             self.statusBar().showMessage(f"❌ Ошибка синхронизации: {message}", 8000)
 

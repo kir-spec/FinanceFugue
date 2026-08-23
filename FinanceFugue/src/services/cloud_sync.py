@@ -1,8 +1,9 @@
+import copy
 import json
 import shutil
 import time
 import os
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Any, Dict, Tuple, Optional, List
 from pathlib import Path
 
 import requests
@@ -17,6 +18,118 @@ from ..logger import get_logger
 logger = get_logger("CloudSync")
 
 DEFAULT_TELEGRAM_BOT_TOKEN = os.getenv("FINANCE_BOT_TOKEN", os.getenv("TELEGRAM_BOT_TOKEN", "8833825596:AAGFSunb0dXg27TM0W4Ff45W7Vd18I1P95Y"))
+
+# Протокол обмена с ботом. getUpdates использовать нельзя: бот уже
+# держит long-poll, а исходящие документы бота в updates не попадают.
+SYNC_TAG = "#FINANCE_FUGUE_SYNC"
+SNAPSHOT_TAG = "#FINANCE_FUGUE_SNAPSHOT"
+PULL_TAG = "#FINANCE_FUGUE_PULL_REQUEST"
+TG_API_BASE = "https://api.telegram.org"
+
+
+def is_crm_database_payload(data: Any) -> bool:
+    """Проверяет, что JSON — база FinanceFugue, а не служебный pull-запрос."""
+    if isinstance(data, list):
+        return True
+    if not isinstance(data, dict):
+        return False
+    if data.get("_sync_action") == "pull":
+        return False
+    return "clients" in data
+
+
+def _caption_has(caption: Optional[str], tag: str) -> bool:
+    return tag in (caption or "")
+
+
+def _clients_list(payload: Any) -> List[dict]:
+    if isinstance(payload, list):
+        return [c for c in payload if isinstance(c, dict)]
+    if isinstance(payload, dict):
+        clients = payload.get("clients", [])
+        if isinstance(clients, list):
+            return [c for c in clients if isinstance(c, dict)]
+    return []
+
+
+def _record_id(item: dict, id_key: Optional[str]) -> str:
+    if id_key and item.get(id_key):
+        return str(item[id_key])
+    if item.get("id"):
+        return str(item["id"])
+    return f"{item.get('name', '')}|{item.get('path', '')}|{item.get('tg_file_id', '')}"
+
+
+def _merge_record_lists(
+    local_items: List[dict],
+    remote_items: List[dict],
+    prefer_remote: bool,
+    id_key: str = "id",
+    nested: Optional[List[Tuple[str, str]]] = None,
+) -> List[dict]:
+    nested = nested or []
+    local_map = {_record_id(item, id_key): item for item in local_items if _record_id(item, id_key)}
+    remote_map = {_record_id(item, id_key): item for item in remote_items if _record_id(item, id_key)}
+    merged: List[dict] = []
+    seen = set()
+    for key in list(local_map) + [k for k in remote_map if k not in local_map]:
+        if key in seen:
+            continue
+        seen.add(key)
+        local_item = local_map.get(key)
+        remote_item = remote_map.get(key)
+        if local_item and remote_item:
+            merged.append(_merge_records(local_item, remote_item, prefer_remote, nested))
+        else:
+            merged.append(copy.deepcopy(remote_item or local_item))
+    return merged
+
+
+def _merge_records(
+    local: dict,
+    remote: dict,
+    prefer_remote: bool,
+    nested: List[Tuple[str, str]],
+) -> dict:
+    winner, loser = (remote, local) if prefer_remote else (local, remote)
+    out = {**copy.deepcopy(loser), **copy.deepcopy(winner)}
+    for key, child_id in nested:
+        child_nested: List[Tuple[str, str]] = []
+        if key == "orders":
+            child_nested = [("payments", "id"), ("files", "id")]
+        out[key] = _merge_record_lists(
+            local.get(key) or [],
+            remote.get(key) or [],
+            prefer_remote,
+            id_key=child_id,
+            nested=child_nested,
+        )
+    return out
+
+
+def merge_crm_payloads(local: Any, remote: Any, prefer_remote: bool) -> dict:
+    """Объединяет две CRM-базы: уникальные записи с обеих сторон сохраняются.
+
+    Для совпадающих id побеждает сторона, которую указали как более свежую.
+    Вложенные заказы, платежи и файлы тоже объединяются по id.
+    """
+    merged_clients = _merge_record_lists(
+        _clients_list(local),
+        _clients_list(remote),
+        prefer_remote,
+        id_key="id",
+        nested=[("orders", "id")],
+    )
+    schema = 1
+    for payload in (remote, local):
+        if isinstance(payload, dict) and payload.get("schema_version"):
+            schema = payload["schema_version"]
+            break
+    envelope: Dict[str, Any] = {"schema_version": schema, "clients": merged_clients}
+    if isinstance(remote, dict) and remote.get("exported_at"):
+        envelope["exported_at"] = remote["exported_at"]
+    return envelope
+
 
 class TelegramBotSync:
     """
@@ -87,7 +200,7 @@ class TelegramBotSync:
             except Exception as e:
                 return False, f"Файл базы данных не найден: {db_path} ({e})"
 
-        url = f"https://api.telegram.org/bot{token}/sendDocument"
+        url = f"{TG_API_BASE}/bot{token}/sendDocument"
         timestamp = time.strftime("%d.%m.%Y %H:%M:%S")
         doc_name = "pro_database.json"
 
@@ -97,7 +210,10 @@ class TelegramBotSync:
                     url,
                     data={
                         "chat_id": chat_id,
-                        "caption": f"🔄 <b>Автосинхронизация FinanceFugue</b>\n📅 {timestamp}\n#FINANCE_FUGUE_SYNC",
+                        "caption": (
+                            f"🔄 <b>Автосинхронизация FinanceFugue</b>\n"
+                            f"📅 {timestamp}\n{SYNC_TAG}"
+                        ),
                         "parse_mode": "HTML"
                     },
                     files={"document": (doc_name, f)},
@@ -113,6 +229,8 @@ class TelegramBotSync:
                         save_settings(settings)
                     except Exception:
                         pass
+                if new_msg_id:
+                    TelegramBotSync._pin_message(token, chat_id, new_msg_id)
                 return True, "База успешно отправлена в Telegram-бота!"
             else:
                 return False, f"Telegram API Error ({response.status_code}): {response.text}"
@@ -120,85 +238,293 @@ class TelegramBotSync:
             return False, f"Ошибка отправки в Telegram: {e}"
 
     @staticmethod
-    def pull_latest_database(target_db_path: Path, token: str, chat_id: str) -> Tuple[bool, str]:
-        """
-        Получает последнюю версию базы данных из чата пользователя с ботом.
-        """
+    def _api(token: str, method: str) -> str:
+        return f"{TG_API_BASE}/bot{token}/{method}"
+
+    @staticmethod
+    def _pin_message(token: str, chat_id: str, message_id: int) -> None:
+        try:
+            requests.post(
+                TelegramBotSync._api(token, "pinChatMessage"),
+                json={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "disable_notification": True,
+                },
+                timeout=10,
+            )
+        except Exception as e:
+            logger.debug("Не удалось закрепить сообщение синхронизации: %s", e)
+
+    @staticmethod
+    def _get_pinned_message(token: str, chat_id: str) -> Optional[dict]:
+        try:
+            resp = requests.get(
+                TelegramBotSync._api(token, "getChat"),
+                params={"chat_id": chat_id},
+                timeout=15,
+            )
+        except Exception as e:
+            logger.debug("getChat не удался: %s", e)
+            return None
+        if resp.status_code != 200:
+            return None
+        return (resp.json().get("result") or {}).get("pinned_message")
+
+    @staticmethod
+    def _download_file_bytes(token: str, file_id: str) -> Tuple[bool, bytes, str]:
+        f_resp = requests.get(
+            TelegramBotSync._api(token, "getFile"),
+            params={"file_id": file_id},
+            timeout=10,
+        )
+        if f_resp.status_code != 200:
+            return False, b"", f"Не удалось получить ссылку на файл: {f_resp.text}"
+        file_path_tg = (f_resp.json().get("result") or {}).get("file_path")
+        if not file_path_tg:
+            return False, b"", "Telegram не вернул путь к файлу"
+        download_url = f"{TG_API_BASE}/file/bot{token}/{file_path_tg}"
+        down_resp = requests.get(download_url, timeout=30)
+        if down_resp.status_code != 200:
+            return False, b"", f"Ошибка скачивания файла базы: {down_resp.status_code}"
+        return True, down_resp.content, ""
+
+    @staticmethod
+    def _parse_crm_bytes(content_bytes: bytes) -> Tuple[bool, Any, str]:
+        try:
+            data = json.loads(content_bytes.decode("utf-8"))
+        except Exception as e:
+            return False, None, f"Полученный файл поврежден: {e}"
+        if not is_crm_database_payload(data):
+            return False, None, "Полученный файл не содержит валидных данных CRM"
+        return True, data, ""
+
+    @staticmethod
+    def _write_database(target_db_path: Path, content_bytes: bytes) -> None:
+        if target_db_path.exists():
+            backup_path = target_db_path.with_suffix(f".backup_{int(time.time())}.json")
+            shutil.copy2(target_db_path, backup_path)
+        target_db_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_db_path, "wb") as f:
+            f.write(content_bytes)
+
+    @staticmethod
+    def _pinned_snapshot_ready(pinned: Optional[dict], *, ignore_message_id: Optional[int] = None) -> bool:
+        if not pinned:
+            return False
+        if ignore_message_id and pinned.get("message_id") == ignore_message_id:
+            return False
+        caption = pinned.get("caption") or ""
+        if _caption_has(caption, PULL_TAG):
+            return False
+        doc = pinned.get("document") or {}
+        fname = (doc.get("file_name") or "").lower()
+        if not fname.endswith(".json"):
+            return False
+        # Только снимок бота. Документ ПК с SYNC_TAG закреплять можно,
+        # но забирать его обратно нельзя — там нет данных, внесённых в боте.
+        return _caption_has(caption, SNAPSHOT_TAG)
+
+    @staticmethod
+    def _send_pull_request(token: str, chat_id: str) -> Tuple[bool, Optional[int], str]:
+        payload = {
+            "schema_version": 1,
+            "clients": [],
+            "_sync_action": "pull",
+            "_sync_action": "pull",
+        }
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        try:
+            response = requests.post(
+                TelegramBotSync._api(token, "sendDocument"),
+                data={
+                    "chat_id": chat_id,
+                    "caption": (
+                        f"⬇️ <b>Запрос базы из бота</b>\n"
+                        f"{PULL_TAG}"
+                    ),
+                    "parse_mode": "HTML",
+                },
+                files={"document": ("sync_pull_request.json", raw)},
+                timeout=30,
+            )
+        except Exception as e:
+            return False, None, f"Ошибка отправки запроса в бота: {e}"
+        if response.status_code != 200:
+            return False, None, f"Telegram API Error ({response.status_code}): {response.text}"
+        msg_id = (response.json().get("result") or {}).get("message_id")
+        if msg_id:
+            TelegramBotSync._pin_message(token, chat_id, msg_id)
+        return True, msg_id, ""
+
+    @staticmethod
+    def _download_pinned_crm(token: str, pinned: dict) -> Tuple[bool, bytes, str, int]:
+        doc = pinned.get("document") or {}
+        file_id = doc.get("file_id")
+        if not file_id:
+            return False, b"", "В закреплённом сообщении нет файла базы", 0
+        ok, content, err = TelegramBotSync._download_file_bytes(token, file_id)
+        if not ok:
+            return False, b"", err, 0
+        parsed_ok, _, parse_err = TelegramBotSync._parse_crm_bytes(content)
+        if not parsed_ok:
+            return False, b"", parse_err, 0
+        return True, content, "", int(pinned.get("date") or 0)
+
+    @staticmethod
+    def _remember_snapshot_id(settings: Optional[dict], message_id: Optional[int]) -> None:
+        if settings is None or not message_id:
+            return
+        settings["last_telegram_snapshot_msg_id"] = int(message_id)
+        try:
+            from .settings import save_settings
+            save_settings(settings)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _apply_remote_database(
+        target_db_path: Path,
+        content_bytes: bytes,
+        remote_date: int = 0,
+        prefer_remote: bool = True,
+    ) -> Tuple[bool, str]:
+        ok, remote_data, err = TelegramBotSync._parse_crm_bytes(content_bytes)
+        if not ok:
+            return False, err
+
+        local_data: Any = None
+        if target_db_path.exists():
+            try:
+                local_data = json.loads(target_db_path.read_text(encoding="utf-8"))
+            except Exception:
+                local_data = None
+
+        if local_data is None or not is_crm_database_payload(local_data):
+            TelegramBotSync._write_database(target_db_path, content_bytes)
+            return True, ""
+
+        merged = merge_crm_payloads(local_data, remote_data, prefer_remote=prefer_remote)
+        raw = json.dumps(merged, ensure_ascii=False, indent=2).encode("utf-8")
+        TelegramBotSync._write_database(target_db_path, raw)
+        return True, ""
+
+    @staticmethod
+    def pull_latest_database(
+        target_db_path: Path,
+        token: str,
+        chat_id: str,
+        timeout_sec: float = 25.0,
+        settings: Optional[dict] = None,
+        force_refresh: bool = True,
+        prefer_remote: bool = True,
+    ) -> Tuple[bool, str]:
+        """Загружает актуальную базу бота через закреплённый снимок (без getUpdates)."""
         token = token.strip() or DEFAULT_TELEGRAM_BOT_TOKEN
         chat_id = chat_id.strip()
         if not token or not chat_id:
             return False, "Не указан токен или Chat ID"
 
         try:
-            # Запрашиваем последние обновления
-            resp = requests.get(
-                f"https://api.telegram.org/bot{token}/getUpdates",
-                params={"limit": 50, "allowed_updates": ["message"]},
-                timeout=15
+            if not force_refresh:
+                pinned = TelegramBotSync._get_pinned_message(token, chat_id)
+                last_id = (settings or {}).get("last_telegram_snapshot_msg_id")
+                pinned_id = (pinned or {}).get("message_id")
+                if not TelegramBotSync._pinned_snapshot_ready(pinned):
+                    return True, "Нет новых данных из бота"
+                if last_id and pinned_id == last_id:
+                    return True, "Нет новых данных из бота"
+                ok, content, err, latest_time = TelegramBotSync._download_pinned_crm(token, pinned)
+                if not ok:
+                    return False, err
+                applied, apply_err = TelegramBotSync._apply_remote_database(
+                    target_db_path, content, latest_time, prefer_remote=prefer_remote
+                )
+                if not applied:
+                    return False, apply_err
+                TelegramBotSync._remember_snapshot_id(settings, pinned_id)
+                stamp = time.strftime("%d.%m.%Y %H:%M", time.localtime(latest_time or time.time()))
+                return True, f"База данных успешно загружена из бота! (Обновлена {stamp})"
+
+            previous = TelegramBotSync._get_pinned_message(token, chat_id)
+            previous_id = (previous or {}).get("message_id")
+
+            sent, pull_msg_id, send_err = TelegramBotSync._send_pull_request(token, chat_id)
+            if not sent:
+                return False, send_err
+
+            ignore_ids = {mid for mid in (previous_id, pull_msg_id) if mid}
+
+            deadline = time.time() + timeout_sec
+            while time.time() < deadline:
+                pinned = TelegramBotSync._get_pinned_message(token, chat_id)
+                pinned_id = (pinned or {}).get("message_id")
+                if (
+                    pinned_id not in ignore_ids
+                    and TelegramBotSync._pinned_snapshot_ready(pinned)
+                ):
+                    ok, content, err, latest_time = TelegramBotSync._download_pinned_crm(token, pinned)
+                    if ok:
+                        applied, apply_err = TelegramBotSync._apply_remote_database(
+                            target_db_path, content, latest_time, prefer_remote=prefer_remote
+                        )
+                        if not applied:
+                            return False, apply_err
+                        TelegramBotSync._remember_snapshot_id(settings, pinned_id)
+                        stamp = time.strftime("%d.%m.%Y %H:%M", time.localtime(latest_time or time.time()))
+                        return True, f"База данных успешно загружена из бота! (Обновлена {stamp})"
+                    if err:
+                        return False, err
+                time.sleep(1.2)
+
+            return False, (
+                "Бот не вернул базу за отведённое время. "
+                "Убедитесь, что бот запущен, и в чате с ботом нажмите "
+                "«Выгрузить базу в программу», затем повторите загрузку."
             )
-            if resp.status_code != 200:
-                return False, f"Ошибка получения данных от Telegram API: {resp.text}"
-
-            updates = resp.json().get("result", [])
-            latest_doc = None
-            latest_time = 0
-
-            # Ищем самый свежий pro_database.json или .json документ для данного chat_id
-            for u in reversed(updates):
-                msg = u.get("message") or u.get("channel_post")
-                if not msg:
-                    continue
-                sender_id = str(msg.get("chat", {}).get("id", ""))
-                if sender_id != chat_id:
-                    continue
-
-                doc = msg.get("document")
-                if doc:
-                    fname = (doc.get("file_name") or "").lower()
-                    if fname.endswith(".json") or fname.endswith(".db"):
-                        latest_doc = doc
-                        latest_time = msg.get("date", 0)
-                        break
-
-            if not latest_doc:
-                return False, "В чате с ботом пока нет файлов базы данных. Отправьте /sync в боте или нажмите 'Выгрузить базу в программу'."
-
-            # Скачиваем файл
-            file_id = latest_doc.get("file_id")
-            f_resp = requests.get(f"https://api.telegram.org/bot{token}/getFile", params={"file_id": file_id}, timeout=10)
-            if f_resp.status_code != 200:
-                return False, f"Не удалось получить ссылку на файл: {f_resp.text}"
-
-            file_path_tg = f_resp.json().get("result", {}).get("file_path")
-            download_url = f"https://api.telegram.org/file/bot{token}/{file_path_tg}"
-
-            down_resp = requests.get(download_url, timeout=30)
-            if down_resp.status_code != 200:
-                return False, f"Ошибка скачивания файла базы: {down_resp.status_code}"
-
-            content_bytes = down_resp.content
-
-            # Валидируем JSON
-            try:
-                data = json.loads(content_bytes.decode("utf-8"))
-                if not isinstance(data, (dict, list)):
-                    return False, "Полученный файл не содержит валидных данных CRM"
-            except Exception as e:
-                return False, f"Полученный файл поврежден: {e}"
-
-            # Создаем резервную копию перед заменой
-            if target_db_path.exists():
-                backup_path = target_db_path.with_suffix(f".backup_{int(time.time())}.json")
-                shutil.copy2(target_db_path, backup_path)
-
-            # Сохраняем новую базу
-            with open(target_db_path, "wb") as f:
-                f.write(content_bytes)
-
-            return True, f"База данных успешно загружена из бота! (Обновлена {time.strftime('%d.%m.%Y %H:%M', time.localtime(latest_time))})"
-
         except Exception as e:
             return False, f"Ошибка получения базы из бота: {e}"
+
+    @staticmethod
+    def full_sync(
+        db_path: Path,
+        token: str,
+        chat_id: str,
+        settings: Optional[dict] = None,
+        timeout_sec: float = 30.0,
+    ) -> Tuple[bool, str]:
+        """Забирает свежий снимок бота, сливает с базой ПК и отправляет результат в бота."""
+        token = token.strip() or DEFAULT_TELEGRAM_BOT_TOKEN
+        chat_id = chat_id.strip()
+        pull_ok, pull_msg = TelegramBotSync.pull_latest_database(
+            db_path,
+            token,
+            chat_id,
+            timeout_sec=timeout_sec,
+            settings=settings,
+            force_refresh=True,
+            prefer_remote=False,
+        )
+        if not pull_ok:
+            push_ok, push_msg = TelegramBotSync.push_database(
+                db_path, token, chat_id, settings=settings
+            )
+            if push_ok:
+                return True, (
+                    f"База отправлена в бота. Снимок из бота не получен: {pull_msg}"
+                )
+            return False, f"{pull_msg} | {push_msg}"
+
+        push_ok, push_msg = TelegramBotSync.push_database(
+            db_path, token, chat_id, settings=settings
+        )
+        if not push_ok:
+            return False, f"Базы объединены на ПК, но отправка в бота не удалась: {push_msg}"
+        return True, (
+            "Двусторонняя синхронизация завершена. "
+            "Программа взяла свежие данные бота, сохранила уникальные записи с ПК "
+            "и отправила объединённую базу в бота."
+        )
 
 
 class CloudSyncWorker(QThread):
@@ -225,10 +551,25 @@ class CloudSyncWorker(QThread):
                 self.finished_sync.emit(success, msg)
                 return
 
-            if self.action == "pull_telegram":
+            if self.action in ("pull_telegram", "pull_live"):
                 token = self.settings.get("telegram_token", DEFAULT_TELEGRAM_BOT_TOKEN).strip()
                 chat_id = self.settings.get("telegram_chat_id", "").strip()
-                success, msg = TelegramBotSync.pull_latest_database(self.db_path, token, chat_id)
+                success, msg = TelegramBotSync.pull_latest_database(
+                    self.db_path,
+                    token,
+                    chat_id,
+                    settings=self.settings,
+                    force_refresh=self.action != "pull_live",
+                )
+                self.finished_sync.emit(success, msg)
+                return
+
+            if self.action == "full_sync":
+                token = self.settings.get("telegram_token", DEFAULT_TELEGRAM_BOT_TOKEN).strip()
+                chat_id = self.settings.get("telegram_chat_id", "").strip()
+                success, msg = TelegramBotSync.full_sync(
+                    self.db_path, token, chat_id, settings=self.settings
+                )
                 self.finished_sync.emit(success, msg)
                 return
 

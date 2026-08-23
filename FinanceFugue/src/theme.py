@@ -81,9 +81,14 @@ _BTN_DANGER_COMPACT = """
     }
 """
 _INPUT_BASE = f"""
-    QLineEdit, QTextEdit, QComboBox {{
+    QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {{
         background-color: {COLOR_BG_INPUT}; color: {COLOR_TEXT};
-        border: 1px solid {COLOR_BORDER}; padding: 6px; border-radius: 3px; font-size: 11pt;
+        border: 1px solid {COLOR_BORDER}; padding: 6px; border-radius: 4px; font-size: 11pt;
+        selection-background-color: {COLOR_PRIMARY}; selection-color: #FFFFFF;
+    }}
+    QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{
+        border: 1px solid {COLOR_ACCENT};
+        background-color: {_BTN_BG};
     }}
 """
 _CHECKBOX = f"""
@@ -620,6 +625,7 @@ def create_dark_palette() -> QPalette:
     palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(255, 255, 255))
     palette.setColor(QPalette.ColorRole.ToolTipText, QColor(255, 255, 255))
     palette.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
+    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(180, 180, 180))
     palette.setColor(QPalette.ColorRole.Button, QColor(45, 45, 45))
     palette.setColor(QPalette.ColorRole.ButtonText, QColor(255, 255, 255))
     palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))

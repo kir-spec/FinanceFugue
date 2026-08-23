@@ -19,6 +19,44 @@ class LoginDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
 
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1E1E1E;
+            }
+            QLabel {
+                color: #FFFFFF;
+            }
+            QLineEdit {
+                background-color: #2D2D2D;
+                color: #FFFFFF;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 8px 12px;
+                font-size: 14px;
+                selection-background-color: #0078D7;
+                selection-color: #FFFFFF;
+            }
+            QLineEdit:focus {
+                border: 1px solid #00D1FF;
+                background-color: #333333;
+            }
+            QPushButton {
+                background-color: #0078D7;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 4px;
+                padding: 10px 24px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1084E3;
+            }
+            QPushButton:pressed {
+                background-color: #0063B1;
+            }
+        """)
+
         is_encrypted = self.storage.check_is_encrypted()
         db_exists = self.storage.path.exists()
 
@@ -36,32 +74,29 @@ class LoginDialog(QDialog):
             info_text = "Придумайте надежный Master-пароль для шифрования ваших финансовых данных."
 
         title_lbl = QLabel(title_text)
-        title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
+        title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #FFFFFF;")
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title_lbl)
 
         info_lbl = QLabel(info_text)
         info_lbl.setWordWrap(True)
         info_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        info_lbl.setStyleSheet("color: #cccccc;")
+        info_lbl.setStyleSheet("color: #DDDDDD; font-size: 12px;")
         layout.addWidget(info_lbl)
 
         self.pwd_edit = QLineEdit()
-        self.pwd_edit.setPlaceholderText("Пароль")
+        self.pwd_edit.setPlaceholderText("Введите пароль...")
         self.pwd_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.pwd_edit.setStyleSheet("padding: 8px; font-size: 14px;")
         layout.addWidget(self.pwd_edit)
 
         if self.mode in ("migrate", "create"):
             self.pwd_confirm = QLineEdit()
-            self.pwd_confirm.setPlaceholderText("Подтвердите пароль")
+            self.pwd_confirm.setPlaceholderText("Подтвердите пароль...")
             self.pwd_confirm.setEchoMode(QLineEdit.EchoMode.Password)
-            self.pwd_confirm.setStyleSheet("padding: 8px; font-size: 14px;")
             layout.addWidget(self.pwd_confirm)
 
         btn_layout = QHBoxLayout()
         self.btn_ok = QPushButton("Продолжить")
-        self.btn_ok.setStyleSheet("background-color: #2196F3; color: white; padding: 8px; font-weight: bold;")
         self.btn_ok.clicked.connect(self.attempt_login)
         btn_layout.addStretch()
         btn_layout.addWidget(self.btn_ok)

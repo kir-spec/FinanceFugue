@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QPushButton, QMessageBox, QFileDialog, QCheckBox,
-    QGroupBox, QInputDialog, QComboBox, QLabel, QLineEdit, QTextEdit
+    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QFileDialog, QCheckBox,
+    QGroupBox, QInputDialog, QComboBox, QLabel, QLineEdit, QTextEdit, QTabWidget, QWidget
 )
 
 from ..logger import get_logger
@@ -15,175 +15,207 @@ from ..theme import SETTINGS_DIALOG_STYLESHEET
 
 logger = get_logger("Dialogs")
 
-# --- ДИАЛОГ НАСТРОЕК ---
+# --- ДИАЛОГ НАСТРОЕК (С ВКЛАДКАМИ) ---
 class SettingsDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self._window = parent
         self.setWindowTitle("Настройки")
-        
+        self.resize(540, 430)
         self.setStyleSheet(SETTINGS_DIALOG_STYLESHEET)
         
-        layout = QVBoxLayout(self)
-        layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetFixedSize)
-        layout.setSpacing(5)
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(12, 12, 12, 12)
         
-        # Группа управления базой данных
-        db_group = QGroupBox("База данных")
-        db_group.setObjectName("DatabaseGroup")
-        db_layout = QVBoxLayout(db_group)
-        db_layout.setSpacing(5)
-        db_layout.setContentsMargins(10, 10, 10, 10)
+        # Создаем удобный TabWidget
+        self.tabs = QTabWidget()
         
-        btn_db_location = QPushButton("Выбрать место хранения")
-        btn_db_location.clicked.connect(self.change_database_location)
-        
-        btn_imp_folder = QPushButton("Импорт из папки")
-        btn_imp_folder.clicked.connect(self._window.import_from_folder)
-        
-        btn_exp = QPushButton("Экспорт (JSON)")
-        btn_exp.clicked.connect(self._window.export_json)
-        
-        btn_imp = QPushButton("Импорт (JSON)")
-        btn_imp.clicked.connect(self._window.import_json_file)
-        
-        btn_full = QPushButton("Полный бэкап (ZIP)")
-        btn_full.clicked.connect(self._window.export_full_backup)
-        
-        db_layout.addWidget(btn_db_location)
-        db_layout.addWidget(btn_imp_folder)
-        db_layout.addWidget(btn_exp)
-        db_layout.addWidget(btn_imp)
-        db_layout.addWidget(btn_full)
-        
-        # Кнопка удаления всех файлов
-        btn_del_files = QPushButton("🗑 Удалить ВСЕ файлы")
-        btn_del_files.clicked.connect(self._window.delete_all_files)
-        db_layout.addWidget(btn_del_files)
+        # 1. Вкладка: Общие настройки
+        tab_general = QWidget()
+        gen_layout = QVBoxLayout(tab_general)
+        gen_layout.setSpacing(8)
+        gen_layout.setContentsMargins(12, 12, 12, 12)
 
-        # Кнопка удаления всей базы
-        btn_del_db = QPushButton("☠ Удалить ВСЮ базу данных")
-        btn_del_db.clicked.connect(self._window.delete_database_full)
-        db_layout.addWidget(btn_del_db)
-
-        layout.addWidget(db_group)
-
-        # Группа настроек приложения
-        settings_group = QGroupBox("Настройки")
-        settings_group.setObjectName("SettingsGroup")
-        settings_layout = QVBoxLayout(settings_group)
-        settings_layout.setSpacing(5)
-        settings_layout.setContentsMargins(10, 10, 10, 10)
-        
-        btn_backup_settings = QPushButton("Создать копию настроек")
-        btn_backup_settings.clicked.connect(self.manual_backup_settings)
-        
-        btn_restore_settings = QPushButton("Восстановить настройки")
-        btn_restore_settings.clicked.connect(self.restore_settings_dialog)
-        
-        settings_layout.addWidget(btn_backup_settings)
-        settings_layout.addWidget(btn_restore_settings)
-
-        self.deadline_notify_cb = QCheckBox("Уведомления о приближающихся дедлайнах")
-        self.deadline_notify_cb.setChecked(
-            self._window.app_settings.get("deadline_notifications", True)
-        )
-        self.deadline_notify_cb.stateChanged.connect(self._save_deadline_pref)
-        settings_layout.addWidget(self.deadline_notify_cb)
-        
+        # Язык интерфейса
+        gen_layout.addWidget(QLabel("🌐 Язык интерфейса / Language / Мова:"))
         self.lang_combo = QComboBox()
         self.lang_combo.addItem("🌐 Авто (Язык системы / Auto)", "auto")
         self.lang_combo.addItem("🇬🇧 English", "en")
         self.lang_combo.addItem("🇷🇺 Русский", "ru")
         self.lang_combo.addItem("🇺🇦 Українська", "uk")
-        
         current_saved_lang = self._window.app_settings.get("ui_language", "auto")
         idx = {"auto": 0, "en": 1, "ru": 2, "uk": 3}.get(current_saved_lang, 0)
         self.lang_combo.setCurrentIndex(idx)
         self.lang_combo.currentIndexChanged.connect(self._save_lang_pref)
-        
-        settings_layout.addWidget(QLabel("🌐 Язык интерфейса / Language / Мова:"))
-        settings_layout.addWidget(self.lang_combo)
+        gen_layout.addWidget(self.lang_combo)
 
+        # Режим работы
         from ..services.i18n import t
+        gen_layout.addWidget(QLabel("🎯 Режим работы программы / Mode:"))
         self.mode_combo = QComboBox()
         self.mode_combo.addItem(t("mode_full"), "full")
         self.mode_combo.addItem(t("mode_personal"), "personal")
         self.mode_combo.addItem(t("mode_crm"), "crm")
-        
         current_saved_mode = self._window.app_settings.get("app_mode", "full")
         m_idx = {"full": 0, "personal": 1, "crm": 2}.get(current_saved_mode, 0)
         self.mode_combo.setCurrentIndex(m_idx)
         self.mode_combo.currentIndexChanged.connect(self._save_mode_pref)
-        
-        settings_layout.addWidget(QLabel("🎯 Режим работы программы / Mode:"))
-        settings_layout.addWidget(self.mode_combo)
+        gen_layout.addWidget(self.mode_combo)
 
+        # Тема оформления
+        gen_layout.addWidget(QLabel("🎨 Тема оформления (требует перезапуска):"))
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["🌙 Темная (по умолчанию)", "☀️ Светлая"])
         if self._window.app_settings.get("theme", "dark") == "light":
             self.theme_combo.setCurrentIndex(1)
         self.theme_combo.currentIndexChanged.connect(self._save_theme_pref)
-        settings_layout.addWidget(QLabel("Тема оформления (требует перезапуска):"))
-        settings_layout.addWidget(self.theme_combo)
-        
-        btn_tg_sync = QPushButton("📱 Синхронизация с Telegram-ботом")
-        btn_tg_sync.setStyleSheet("font-weight: bold; color: #00D1FF;")
+        gen_layout.addWidget(self.theme_combo)
+
+        # Дедлайны чекбокс
+        self.deadline_notify_cb = QCheckBox("🔔 Уведомления о приближающихся дедлайнах")
+        self.deadline_notify_cb.setChecked(
+            self._window.app_settings.get("deadline_notifications", True)
+        )
+        self.deadline_notify_cb.stateChanged.connect(self._save_deadline_pref)
+        gen_layout.addWidget(self.deadline_notify_cb)
+
+        # Резервная копия конфигурации
+        cfg_row = QHBoxLayout()
+        btn_backup_settings = QPushButton("💾 Резервная копия настроек")
+        btn_backup_settings.clicked.connect(self.manual_backup_settings)
+        btn_restore_settings = QPushButton("🔄 Восстановить настройки")
+        btn_restore_settings.clicked.connect(self.restore_settings_dialog)
+        cfg_row.addWidget(btn_backup_settings)
+        cfg_row.addWidget(btn_restore_settings)
+        gen_layout.addLayout(cfg_row)
+        gen_layout.addStretch()
+
+        self.tabs.addTab(tab_general, "⚙️ Общие")
+
+        # 2. Вкладка: База данных
+        tab_db = QWidget()
+        db_layout = QVBoxLayout(tab_db)
+        db_layout.setSpacing(8)
+        db_layout.setContentsMargins(12, 12, 12, 12)
+
+        btn_db_location = QPushButton("📁 Выбрать место хранения базы данных")
+        btn_db_location.clicked.connect(self.change_database_location)
+        db_layout.addWidget(btn_db_location)
+
+        btn_imp_folder = QPushButton("📂 Импорт из папки клиентов")
+        btn_imp_folder.clicked.connect(self._window.import_from_folder)
+        db_layout.addWidget(btn_imp_folder)
+
+        json_row = QHBoxLayout()
+        btn_exp = QPushButton("📤 Экспорт (JSON)")
+        btn_exp.clicked.connect(self._window.export_json)
+        btn_imp = QPushButton("📥 Импорт (JSON)")
+        btn_imp.clicked.connect(self._window.import_json_file)
+        json_row.addWidget(btn_exp)
+        json_row.addWidget(btn_imp)
+        db_layout.addLayout(json_row)
+
+        btn_full = QPushButton("📦 Полный бэкап (ZIP архив со всеми файлами)")
+        btn_full.clicked.connect(self._window.export_full_backup)
+        db_layout.addWidget(btn_full)
+
+        # Опасная зона
+        danger_box = QGroupBox("⚠️ Опасная зона")
+        danger_layout = QHBoxLayout(danger_box)
+        btn_del_files = QPushButton("🗑 Удалить ВСЕ файлы")
+        btn_del_files.setStyleSheet("background-color: #8B0000; color: #FFFFFF;")
+        btn_del_files.clicked.connect(self._window.delete_all_files)
+        btn_del_db = QPushButton("☠ Удалить ВСЮ базу")
+        btn_del_db.setStyleSheet("background-color: #A00000; color: #FFFFFF;")
+        btn_del_db.clicked.connect(self._window.delete_database_full)
+        danger_layout.addWidget(btn_del_files)
+        danger_layout.addWidget(btn_del_db)
+        db_layout.addWidget(danger_box)
+        db_layout.addStretch()
+
+        self.tabs.addTab(tab_db, "💾 База данных")
+
+        # 3. Вкладка: Синхронизация (Telegram & Облако)
+        tab_sync = QWidget()
+        sync_layout = QVBoxLayout(tab_sync)
+        sync_layout.setSpacing(10)
+        sync_layout.setContentsMargins(12, 12, 12, 12)
+
+        tg_group = QGroupBox("📱 Двусторонняя синхронизация с Telegram-ботом")
+        tg_l = QVBoxLayout(tg_group)
+        tg_desc = QLabel("Мгновенный обмен базой данных с вашим персональным ботом.")
+        tg_desc.setWordWrap(True)
+        btn_tg_sync = QPushButton("⚡️ Открыть окно синхронизации с Telegram")
+        btn_tg_sync.setStyleSheet("background-color: #0078D7; color: #FFFFFF; font-weight: bold; padding: 8px;")
         btn_tg_sync.clicked.connect(self._open_telegram_sync)
-        settings_layout.addWidget(btn_tg_sync)
+        tg_l.addWidget(tg_desc)
+        tg_l.addWidget(btn_tg_sync)
+        sync_layout.addWidget(tg_group)
 
-        btn_cloud_sync = QPushButton("☁️ Настройка облачных бэкапов")
+        cloud_group = QGroupBox("☁️ Облачные бэкапы (WebDAV / Яндекс.Диск / Dropbox)")
+        cloud_l = QVBoxLayout(cloud_group)
+        cloud_desc = QLabel("Настройка автоматического резервного копирования в сторонние облачные сервисы.")
+        cloud_desc.setWordWrap(True)
+        btn_cloud_sync = QPushButton("☁️ Настроить облачные сервисы")
         btn_cloud_sync.clicked.connect(self._open_cloud_settings)
-        settings_layout.addWidget(btn_cloud_sync)
+        cloud_l.addWidget(cloud_desc)
+        cloud_l.addWidget(btn_cloud_sync)
+        sync_layout.addWidget(cloud_group)
+        sync_layout.addStretch()
 
-        layout.addWidget(settings_group)
+        self.tabs.addTab(tab_sync, "☁️ Синхронизация")
 
-        # Группа реквизитов исполнителя (для PDF-счетов)
-        invoice_group = QGroupBox("Мои реквизиты (для PDF-счетов)")
-        invoice_group.setObjectName("SettingsGroup")
-        invoice_layout = QVBoxLayout(invoice_group)
-        invoice_layout.setSpacing(5)
-        invoice_layout.setContentsMargins(10, 10, 10, 10)
+        # 4. Вкладка: Реквизиты исполнителя (для PDF-счетов)
+        tab_invoice = QWidget()
+        inv_layout = QVBoxLayout(tab_invoice)
+        inv_layout.setSpacing(8)
+        inv_layout.setContentsMargins(12, 12, 12, 12)
 
-        invoice_layout.addWidget(QLabel("Название компании / ФИО исполнителя:"))
+        inv_layout.addWidget(QLabel("Название компании / ФИО исполнителя:"))
         self.seller_name_edit = QLineEdit(
             self._window.app_settings.get("seller_name", "")
         )
         self.seller_name_edit.setPlaceholderText("ИП Иванов И.И. / ООО «Моя Компания»")
         self.seller_name_edit.setMaxLength(200)
         self.seller_name_edit.editingFinished.connect(self._save_invoice_prefs)
-        invoice_layout.addWidget(self.seller_name_edit)
+        inv_layout.addWidget(self.seller_name_edit)
 
-        invoice_layout.addWidget(QLabel("Банковские реквизиты:"))
+        inv_layout.addWidget(QLabel("Банковские реквизиты (для счетов на оплату):"))
         self.seller_requisites_edit = QTextEdit(
             self._window.app_settings.get("seller_requisites", "")
         )
-        self.seller_requisites_edit.setMaximumHeight(100)
+        self.seller_requisites_edit.setMaximumHeight(110)
         self.seller_requisites_edit.setPlaceholderText(
             "ИНН 1234567890\nР/с 40802810...\nБанк: АО «Тинькофф Банк»\nБИК 044525974\nК/с 30101810145250000974"
         )
-        invoice_layout.addWidget(self.seller_requisites_edit)
+        inv_layout.addWidget(self.seller_requisites_edit)
+        inv_layout.addStretch()
 
-        layout.addWidget(invoice_group)
+        self.tabs.addTab(tab_invoice, "📄 Реквизиты (PDF)")
 
-        legal_group = QGroupBox("Правовая информация")
-        legal_group.setObjectName("LegalGroup")
-        legal_layout = QVBoxLayout(legal_group)
-        legal_layout.setContentsMargins(10, 10, 10, 10)
+        # 5. Вкладка: О программе и Лицензия
+        tab_about = QWidget()
+        about_layout = QVBoxLayout(tab_about)
+        about_layout.setSpacing(10)
+        about_layout.setContentsMargins(12, 12, 12, 12)
 
-        btn_about = QPushButton("О программе и лицензии")
+        btn_about = QPushButton("ℹ️ О программе, разработчиках и лицензии")
         btn_about.clicked.connect(self._window.open_about)
-        btn_eula = QPushButton("Перечитать EULA")
+        btn_eula = QPushButton("📜 Лицензионное соглашение (EULA)")
         btn_eula.clicked.connect(self._show_eula)
-        legal_layout.addWidget(btn_about)
-        legal_layout.addWidget(btn_eula)
-        layout.addWidget(legal_group)
+        about_layout.addWidget(btn_about)
+        about_layout.addWidget(btn_eula)
+        about_layout.addStretch()
 
-        layout.addSpacing(10)
-        
+        self.tabs.addTab(tab_about, "⚖️ О программе")
+
+        main_layout.addWidget(self.tabs)
+
+        # Нижняя кнопка закрытия
         btn_close = QPushButton("Закрыть")
         btn_close.clicked.connect(self.accept)
-        layout.addWidget(btn_close)
+        main_layout.addWidget(btn_close)
 
     def accept(self):
         # Сохраняем реквизиты из QTextEdit перед закрытием

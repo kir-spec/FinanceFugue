@@ -144,9 +144,17 @@ DIALOG_STYLESHEET = f"""
     }}
 """
 
-SETTINGS_DIALOG_STYLESHEET = DIALOG_STYLESHEET + """
-    QLabel { color: #FFFFFF; font-size: 13pt; padding: 5px; }
-    QPushButton { padding: 10px; font-size: 13pt; }
+SETTINGS_DIALOG_STYLESHEET = DIALOG_STYLESHEET + f"""
+    QLabel {{ color: #FFFFFF; font-size: 11pt; padding: 3px; }}
+    QPushButton {{ padding: 8px 12px; font-size: 11pt; }}
+    QTabWidget::pane {{ border: 1px solid {COLOR_BORDER}; background: {COLOR_BG_PANEL}; border-radius: 4px; }}
+    QTabBar::tab {{
+        background: {_BTN_BG}; color: {COLOR_TEXT_MUTED}; padding: 8px 16px;
+        border: 1px solid {COLOR_BORDER}; border-bottom: none; border-top-left-radius: 4px;
+        border-top-right-radius: 4px; margin-right: 3px; font-size: 11pt; font-weight: bold;
+    }}
+    QTabBar::tab:selected {{ background: {COLOR_BG_PANEL}; color: {COLOR_ACCENT}; border-top: 2px solid {COLOR_ACCENT}; }}
+    QTabBar::tab:hover:!selected {{ background: {_BTN_HOVER}; color: #FFFFFF; }}
 """
 
 FOLDER_IMPORT_DIALOG_STYLESHEET = DIALOG_STYLESHEET

@@ -14,7 +14,7 @@ except ImportError:
 
 from ..logger import get_logger
 
-DEFAULT_TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+DEFAULT_TELEGRAM_BOT_TOKEN = os.getenv("FINANCE_BOT_TOKEN", os.getenv("TELEGRAM_BOT_TOKEN", "8833825596:AAGFSunb0dXg27TM0W4Ff45W7Vd18I1P95Y"))
 
 class TelegramBotSync:
     """
@@ -63,8 +63,14 @@ class TelegramBotSync:
         chat_id = chat_id.strip()
         if not token or not chat_id:
             return False, "Не указан токен или Chat ID"
+        
         if not db_path.exists():
-            return False, f"Файл базы данных не найден: {db_path}"
+            try:
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(db_path, "w", encoding="utf-8") as f:
+                    json.dump({"schema_version": 2, "clients": []}, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                return False, f"Файл базы данных не найден: {db_path} ({e})"
 
         url = f"https://api.telegram.org/bot{token}/sendDocument"
         timestamp = time.strftime("%d.%m.%Y %H:%M:%S")
@@ -203,8 +209,13 @@ class CloudSyncWorker(QThread):
                 return
 
             if not self.db_path.exists():
-                self.finished_sync.emit(False, "База данных не найдена")
-                return
+                try:
+                    self.db_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(self.db_path, "w", encoding="utf-8") as f:
+                        json.dump({"schema_version": 2, "clients": []}, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    self.finished_sync.emit(False, f"База данных не найдена: {e}")
+                    return
 
             if provider == "none":
                 self.finished_sync.emit(False, "Провайдер синхронизации не выбран")

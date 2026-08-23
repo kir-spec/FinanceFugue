@@ -169,6 +169,15 @@ class TelegramSyncDialog(QDialog):
             QMessageBox.warning(self, "Внимание", "Укажите Telegram Chat ID перед синхронизацией.")
             return
 
+        # Гарантируем сохранение базы на диск перед отправкой
+        try:
+            if hasattr(self.window, "save_database"):
+                self.window.save_database()
+            elif hasattr(self.window, "storage") and hasattr(self.window, "clients"):
+                self.window.storage.save(self.window.clients)
+        except Exception as e:
+            logger.warning("Ошибка предварительного сохранения базы перед синхронизацией: %s", e)
+
         self._set_busy(True, "⏳ Отправка базы данных в Telegram...")
         self._log("Выгрузка базы данных в чат с ботом...")
 

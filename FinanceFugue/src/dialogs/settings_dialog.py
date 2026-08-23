@@ -99,6 +99,11 @@ class SettingsDialog(QDialog):
         settings_layout.addWidget(QLabel("Тема оформления (требует перезапуска):"))
         settings_layout.addWidget(self.theme_combo)
         
+        btn_tg_sync = QPushButton("📱 Синхронизация с Telegram-ботом")
+        btn_tg_sync.setStyleSheet("font-weight: bold; color: #00D1FF;")
+        btn_tg_sync.clicked.connect(self._open_telegram_sync)
+        settings_layout.addWidget(btn_tg_sync)
+
         btn_cloud_sync = QPushButton("☁️ Настройка облачных бэкапов")
         btn_cloud_sync.clicked.connect(self._open_cloud_settings)
         settings_layout.addWidget(btn_cloud_sync)
@@ -174,6 +179,10 @@ class SettingsDialog(QDialog):
     def _open_cloud_settings(self):
         from .cloud_settings import CloudSettingsDialog
         CloudSettingsDialog(self._window).exec()
+
+    def _open_telegram_sync(self):
+        from .telegram_sync_dialog import TelegramSyncDialog
+        TelegramSyncDialog(self._window).exec()
 
     def _show_eula(self):
         if self._window.show_eula_dialog():

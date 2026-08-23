@@ -117,29 +117,64 @@ class DatabaseOpsMixin:
         """Возвращает клиента, выбранного в списке."""
         return self.current_client
 
+    def open_telegram_sync(self):
+        """Открывает диалог 2-сторонней синхронизации с Telegram-ботом."""
+        from ....dialogs.telegram_sync_dialog import TelegramSyncDialog
+        dialog = TelegramSyncDialog(self)
+        dialog.exec()
+
+    def reload_database_after_pull(self):
+        """Перезагружает базу данных после успешного скачивания (Pull) из Telegram."""
+        try:
+            self.clients = self.storage.load()
+            self.refresh_list()
+            self.update_dash()
+            if hasattr(self, "db_info_label"):
+                self.db_info_label.setText(f"Клиентов: {len(self.clients)}")
+            if self.clients:
+                self.current_client = self.clients[0]
+                self.render_client_profile()
+            else:
+                self.current_client = None
+                self.clear_profile_layout()
+            self._set_save_status("Синхронизировано с Telegram")
+            self.statusBar().showMessage(f"☁️ База обновлена из Telegram (Клиентов: {len(self.clients)})", 10000)
+        except Exception as e:
+            logger.error("Ошибка при перезагрузке базы после pull: %s", e, exc_info=True)
+            QMessageBox.critical(self, "Ошибка обновления", f"Не удалось перезагрузить данные:\n{e}")
+
     def trigger_sync(self, force=False):
-        """Запускает фоновую синхронизацию."""
+        """Запускает фоновую синхронизацию с облаком / ботом."""
         import time
         from ....services.cloud_sync import CloudSyncWorker
 
         provider = self.app_settings.get("cloud_provider", "none")
-        if provider == "none":
+        auto_tg = self.app_settings.get("auto_telegram_sync", True)
+        has_tg_chat = bool(self.app_settings.get("telegram_chat_id"))
+
+        if provider == "none" and not (auto_tg and has_tg_chat):
             return
 
-        # Защита от слишком частых бэкапов (раз в 5 минут, если не force)
+        # Если включена автосинхронизация с ботом — используем telegram как провайдер
+        if auto_tg and has_tg_chat and provider == "none":
+            self.app_settings["cloud_provider"] = "telegram"
+            provider = "telegram"
+
+        # Защита от слишком частых бэкапов (раз в 15 сек при сохранении, если не force)
         current_time = time.time()
         last_sync = getattr(self, "_last_cloud_sync", 0)
+        cooldown = 15 if provider == "telegram" else 180
         
-        if not force and (current_time - last_sync) < 300:
+        if not force and (current_time - last_sync) < cooldown:
             return
             
         # Не запускаем, если уже крутится воркер
         if hasattr(self, "cloud_worker") and self.cloud_worker.isRunning():
             return
             
-        self.statusBar().showMessage("☁️ Синхронизация бэкапа...")
+        self.statusBar().showMessage("☁️ Синхронизация с Telegram-ботом...")
         
-        self.cloud_worker = CloudSyncWorker(str(self.storage.path), self.app_settings)
+        self.cloud_worker = CloudSyncWorker(str(self.storage.path), self.app_settings, action="push")
         self.cloud_worker.finished_sync.connect(self._on_sync_finished)
         self.cloud_worker.start()
 
@@ -147,9 +182,9 @@ class DatabaseOpsMixin:
         import time
         if success:
             self._last_cloud_sync = time.time()
-            self.statusBar().showMessage(f"☁️ Бэкап: {message}", 10000)
+            self.statusBar().showMessage(f"☁️ Синхронизация: {message}", 8000)
         else:
-            self.statusBar().showMessage(f"❌ Ошибка бэкапа: {message}", 10000)
+            self.statusBar().showMessage(f"❌ Ошибка синхронизации: {message}", 8000)
 
     def import_from_folder(self):
         """Импорт клиентов из структуры папок"""

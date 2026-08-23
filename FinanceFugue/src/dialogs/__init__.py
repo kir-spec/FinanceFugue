@@ -12,6 +12,7 @@ from .recycle_bin_dialog import RecycleBinDialog
 from .recycle_bin_orders import RecycleBinOrdersDialog
 from .analytics_dialog import AnalyticsDialog
 from .cloud_settings import CloudSettingsDialog
+from .telegram_sync_dialog import TelegramSyncDialog
 
 __all__ = [
     "PaymentsDialog",
@@ -28,4 +29,5 @@ __all__ = [
     "RecycleBinOrdersDialog",
     "AnalyticsDialog",
     "CloudSettingsDialog",
+    "TelegramSyncDialog",
 ]

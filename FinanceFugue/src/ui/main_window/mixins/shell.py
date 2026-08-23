@@ -159,6 +159,12 @@ class ShellMixin:
         btn_add.setStyleSheet(PRIMARY_SIDEBAR_BUTTON_STYLE)
         left_layout.addWidget(btn_add)
 
+        btn_sync = QPushButton("📱 Бот / Синхронизация")
+        btn_sync.setToolTip("Двусторонняя синхронизация с финансовым Telegram-ботом")
+        btn_sync.clicked.connect(self.open_telegram_sync)
+        btn_sync.setStyleSheet(SIDEBAR_BUTTON_STYLE)
+        left_layout.addWidget(btn_sync)
+
         btn_set = QPushButton("⚙ Настройки")
         btn_set.setToolTip("Глобальные настройки программы")
         btn_set.clicked.connect(self.open_settings)

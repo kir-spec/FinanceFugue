@@ -71,9 +71,13 @@ class CloudSettingsDialog(QDialog):
         self.tg_chat_id_edit = QLineEdit(self.app_settings.get("telegram_chat_id", ""))
         self.tg_chat_id_edit.setPlaceholderText("123456789")
         
+        btn_adv_tg = QPushButton("⚡️ Открыть панель полной 2-сторонней синхронизации")
+        btn_adv_tg.clicked.connect(self._open_adv_tg)
+
         tg_layout.addRow(tg_help)
         tg_layout.addRow("Bot Token:", self.tg_token_edit)
         tg_layout.addRow("Chat ID:", self.tg_chat_id_edit)
+        tg_layout.addRow("", btn_adv_tg)
         self.stack.addWidget(self.page_telegram)
         
         # 2. Yandex
@@ -192,6 +196,11 @@ class CloudSettingsDialog(QDialog):
         self._save_settings()
         super().accept()
         
+    def _open_adv_tg(self):
+        self._save_settings()
+        from .telegram_sync_dialog import TelegramSyncDialog
+        TelegramSyncDialog(self.window).exec()
+
     def _test_sync(self):
         self._save_settings()
         

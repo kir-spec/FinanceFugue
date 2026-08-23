@@ -20,12 +20,12 @@ from src.services.eula_renderer import (
 
 
 class TestVersionConstants(unittest.TestCase):
-    """Проверка, что 04.08.2026 правильно пробрасывается во все константы."""
+    """Проверка, что 23.08.2026 правильно пробрасывается во все константы."""
 
     def test_version_display(self):
-        self.assertEqual(VERSION, "04.08.2026")
-        self.assertEqual(VERSION_DATE, "04.08.2026")
-        self.assertEqual(__version_date__, "04.08.2026")
+        self.assertEqual(VERSION, "23.08.2026")
+        self.assertEqual(VERSION_DATE, "23.08.2026")
+        self.assertEqual(__version_date__, "23.08.2026")
 
     def test_semver_matches_date_release(self):
         # SemVer увеличивается вместе с датой релиза
@@ -94,8 +94,8 @@ class TestEULARenderer(unittest.TestCase):
         if not Path("resources/eula.html").exists():
             self.skipTest("resources/eula.html не найден")
         html = load_eula_html(
-            revision="FF-EULA-04.08.2026-1",
-            date="04.08.2026",
+            revision="FF-EULA-23.08.2026-1",
+            date="23.08.2026",
         )
         # Не должно быть неподставленных {{ }} маркеров
         remaining = _PLACEHOLDER_RE.findall(html)

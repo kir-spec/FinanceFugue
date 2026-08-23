@@ -16,8 +16,8 @@ from pathlib import Path
 logger = logging.getLogger("EULA")
 
 # Ревизия + дата подставляются из src/__init__.py.
-DEFAULT_REVISION_KEY = "FF-EULA-04.08.2026-1"
-DEFAULT_DATE = "04.08.2026"
+DEFAULT_REVISION_KEY = "FF-EULA-23.08.2026-1"
+DEFAULT_DATE = "23.08.2026"
 
 _EULA_HTML_NAME = "eula.html"
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Z_][A-Z0-9_]*)\}\}")

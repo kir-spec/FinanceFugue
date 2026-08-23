@@ -171,7 +171,9 @@ class TelegramSyncDialog(QDialog):
 
         # Гарантируем сохранение базы на диск перед отправкой
         try:
-            if hasattr(self.window, "save_database"):
+            if hasattr(self.window, "save_db"):
+                self.window.save_db()
+            elif hasattr(self.window, "save_database"):
                 self.window.save_database()
             elif hasattr(self.window, "storage") and hasattr(self.window, "clients"):
                 self.window.storage.save(self.window.clients)

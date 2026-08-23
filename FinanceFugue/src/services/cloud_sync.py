@@ -14,6 +14,8 @@ except ImportError:
 
 from ..logger import get_logger
 
+logger = get_logger("CloudSync")
+
 DEFAULT_TELEGRAM_BOT_TOKEN = os.getenv("FINANCE_BOT_TOKEN", os.getenv("TELEGRAM_BOT_TOKEN", "8833825596:AAGFSunb0dXg27TM0W4Ff45W7Vd18I1P95Y"))
 
 class TelegramBotSync:

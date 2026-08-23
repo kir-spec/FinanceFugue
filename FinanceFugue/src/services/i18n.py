@@ -348,6 +348,26 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "ru": "🌐 Авто (Язык системы)",
         "uk": "🌐 Авто (Мова системи)",
     },
+    "settings_app_mode": {
+        "en": "Application Mode:",
+        "ru": "Режим работы программы:",
+        "uk": "Режим роботи програми:",
+    },
+    "mode_personal": {
+        "en": "👤 Personal Finance (Home Budget)",
+        "ru": "👤 Личные финансы (Домашняя бухгалтерия)",
+        "uk": "👤 Особисті фінанси (Домашній бюджет)",
+    },
+    "mode_crm": {
+        "en": "💼 Client Manager & Orders (Studio CRM)",
+        "ru": "💼 Клиенты и заказы (CRM студии / фриланса)",
+        "uk": "💼 Клієнти та замовлення (CRM студії / фрілансу)",
+    },
+    "mode_full": {
+        "en": "✨ Full Hybrid Mode (CRM + Finance)",
+        "ru": "✨ Полный гибридный режим (CRM + Финансы)",
+        "uk": "✨ Повний гібридний режим (CRM + Фінанси)",
+    },
     "settings_theme": {
         "en": "Color Theme:",
         "ru": "Тема оформления:",

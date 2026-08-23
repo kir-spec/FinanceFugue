@@ -105,6 +105,20 @@ class SettingsDialog(QDialog):
         settings_layout.addWidget(QLabel("🌐 Язык интерфейса / Language / Мова:"))
         settings_layout.addWidget(self.lang_combo)
 
+        from ..services.i18n import t
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem(t("mode_full"), "full")
+        self.mode_combo.addItem(t("mode_personal"), "personal")
+        self.mode_combo.addItem(t("mode_crm"), "crm")
+        
+        current_saved_mode = self._window.app_settings.get("app_mode", "full")
+        m_idx = {"full": 0, "personal": 1, "crm": 2}.get(current_saved_mode, 0)
+        self.mode_combo.setCurrentIndex(m_idx)
+        self.mode_combo.currentIndexChanged.connect(self._save_mode_pref)
+        
+        settings_layout.addWidget(QLabel("🎯 Режим работы программы / Mode:"))
+        settings_layout.addWidget(self.mode_combo)
+
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["🌙 Темная (по умолчанию)", "☀️ Светлая"])
         if self._window.app_settings.get("theme", "dark") == "light":
@@ -186,6 +200,11 @@ class SettingsDialog(QDialog):
         lang_val = self.lang_combo.currentData()
         self._window.app_settings["ui_language"] = lang_val
         set_current_language(lang_val)
+        self._window.save_settings()
+
+    def _save_mode_pref(self, index: int):
+        mode_val = self.mode_combo.currentData()
+        self._window.app_settings["app_mode"] = mode_val
         self._window.save_settings()
 
     def _save_invoice_prefs(self):

@@ -16,7 +16,11 @@ a = Analysis(
         ('resources/eula.html', 'resources'),
         ('images', 'images'),
     ],
-    hiddenimports=['src', 'src.dialogs', 'src.services', 'src.ui', 'src.utils'],
+    hiddenimports=[
+        'src', 'src.dialogs', 'src.dialogs.telegram_sync_dialog',
+        'src.services', 'src.services.i18n', 'src.services.cloud_sync',
+        'src.ui', 'src.utils', 'src.models', 'src.storage', 'src.theme', 'src.logger'
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

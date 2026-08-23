@@ -60,12 +60,25 @@ class TelegramBotSync:
             return False, f"Сетевая ошибка подключения: {e}"
 
     @staticmethod
-    def push_database(db_path: Path, token: str, chat_id: str) -> Tuple[bool, str]:
+    def push_database(db_path: Path, token: str, chat_id: str, settings: Optional[dict] = None) -> Tuple[bool, str]:
         token = token.strip() or DEFAULT_TELEGRAM_BOT_TOKEN
         chat_id = chat_id.strip()
         if not token or not chat_id:
             return False, "Не указан токен или Chat ID"
         
+        # 1. Удаляем предыдущее сообщение синхронизации, чтобы в чате не копился мусор
+        if settings:
+            last_msg_id = settings.get("last_telegram_sync_msg_id")
+            if last_msg_id:
+                try:
+                    requests.post(
+                        f"https://api.telegram.org/bot{token}/deleteMessage",
+                        json={"chat_id": chat_id, "message_id": last_msg_id},
+                        timeout=5
+                    )
+                except Exception as e:
+                    logger.debug("Не удалось удалить старое сообщение синхронизации: %s", e)
+
         if not db_path.exists():
             try:
                 db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +104,15 @@ class TelegramBotSync:
                     timeout=30
                 )
             if response.status_code == 200:
+                res_json = response.json().get("result", {})
+                new_msg_id = res_json.get("message_id")
+                if settings is not None and new_msg_id:
+                    settings["last_telegram_sync_msg_id"] = new_msg_id
+                    try:
+                        from .settings import save_settings
+                        save_settings(settings)
+                    except Exception:
+                        pass
                 return True, "База успешно отправлена в Telegram-бота!"
             else:
                 return False, f"Telegram API Error ({response.status_code}): {response.text}"
@@ -251,7 +273,7 @@ class CloudSyncWorker(QThread):
     def _sync_telegram(self) -> Tuple[bool, str]:
         token = self.settings.get("telegram_token", DEFAULT_TELEGRAM_BOT_TOKEN).strip()
         chat_id = self.settings.get("telegram_chat_id", "").strip()
-        return TelegramBotSync.push_database(self.db_path, token, chat_id)
+        return TelegramBotSync.push_database(self.db_path, token, chat_id, settings=self.settings)
 
     def _sync_yandex(self) -> Tuple[bool, str]:
         token = self.settings.get("yandex_token", "").strip()

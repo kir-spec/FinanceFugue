@@ -14,6 +14,8 @@ except ImportError:
     WebDavClient = None
 
 from ..logger import get_logger
+from .order_status import reconcile_crm_envelope
+from .crm_sync_payload import build_sync_bytes, persist_clients_after_pull
 
 logger = get_logger("CloudSync")
 
@@ -128,7 +130,11 @@ def merge_crm_payloads(local: Any, remote: Any, prefer_remote: bool) -> dict:
     envelope: Dict[str, Any] = {"schema_version": schema, "clients": merged_clients}
     if isinstance(remote, dict) and remote.get("exported_at"):
         envelope["exported_at"] = remote["exported_at"]
-    return envelope
+    for payload in (remote, local) if prefer_remote else (local, remote):
+        if isinstance(payload, dict) and payload.get("personal_finance"):
+            envelope["personal_finance"] = payload["personal_finance"]
+            break
+    return reconcile_crm_envelope(envelope)
 
 
 class TelegramBotSync:
@@ -205,8 +211,8 @@ class TelegramBotSync:
         doc_name = "pro_database.json"
 
         try:
-            with open(db_path, "rb") as f:
-                response = requests.post(
+            payload_bytes = build_sync_bytes(db_path)
+            response = requests.post(
                     url,
                     data={
                         "chat_id": chat_id,
@@ -216,7 +222,7 @@ class TelegramBotSync:
                         ),
                         "parse_mode": "HTML"
                     },
-                    files={"document": (doc_name, f)},
+                    files={"document": (doc_name, payload_bytes)},
                     timeout=30
                 )
             if response.status_code == 200:
@@ -401,12 +407,15 @@ class TelegramBotSync:
                 local_data = None
 
         if local_data is None or not is_crm_database_payload(local_data):
-            TelegramBotSync._write_database(target_db_path, content_bytes)
+            ok, remote_data, err = TelegramBotSync._parse_crm_bytes(content_bytes)
+            if ok and isinstance(remote_data, dict):
+                persist_clients_after_pull(target_db_path, remote_data)
+            else:
+                TelegramBotSync._write_database(target_db_path, content_bytes)
             return True, ""
 
         merged = merge_crm_payloads(local_data, remote_data, prefer_remote=prefer_remote)
-        raw = json.dumps(merged, ensure_ascii=False, indent=2).encode("utf-8")
-        TelegramBotSync._write_database(target_db_path, raw)
+        persist_clients_after_pull(target_db_path, merged)
         return True, ""
 
     @staticmethod

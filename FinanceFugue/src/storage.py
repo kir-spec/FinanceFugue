@@ -9,6 +9,7 @@ from typing import Any, List
 
 from .models import Client, Order, Payment, ProjectFile
 from .services.crypto import DatabaseCrypto, InvalidPasswordError
+from .services.order_status import normalize_order_status, reconcile_order_dict
 from .services.schema import SCHEMA_VERSION, migrate_client, migrate_order
 
 logger = logging.getLogger("Storage")
@@ -56,6 +57,7 @@ def _parse_clients_list(data: list) -> List[Client]:
 
             # Миграция: заполнить поля заказа, отсутствующие в старых версиях БД.
             migrate_order(o)
+            o = reconcile_order_dict(o)
 
             files = [ProjectFile(**fi) for fi in o.get("files", [])]
             payments = []
@@ -78,8 +80,9 @@ def _parse_clients_list(data: list) -> List[Client]:
                     advance=_finite_float(o.get("advance", 0.0), field="order.advance", default=0.0),
                     created_at=o.get("created_at", "") or "",
                     deadline=o.get("deadline", "") or "",
-                    status=o.get("status", "В работе") or "В работе",
+                    status=normalize_order_status(o.get("status", "В работе") or "В работе"),
                     is_deleted=o.get("is_deleted", False),
+                    is_archived=bool(o.get("is_archived", False)),
                     files=files,
                     payments=payments,
                 )
@@ -93,6 +96,7 @@ def _parse_clients_list(data: list) -> List[Client]:
                 social_link=c_dict.get("social_link", ""),
                 avatar_path=c_dict.get("avatar_path", ""),
                 is_deleted=c_dict.get("is_deleted", False),
+                is_archived=bool(c_dict.get("is_archived", False)),
                 notes=c_dict.get("notes", ""),
                 requisites=c_dict.get("requisites", ""),
                 orders=orders,
@@ -192,8 +196,9 @@ class CRMStorage:
                         "advance": order.advance,
                         "created_at": order.created_at,
                         "deadline": order.deadline,
-                        "status": order.status,
+                        "status": normalize_order_status(order.status),
                         "is_deleted": order.is_deleted,
+                        "is_archived": order.is_archived,
                         "files": [asdict(f) for f in order.files],
                         "payments": [p.to_dict() for p in order.payments],
                     }
@@ -205,6 +210,7 @@ class CRMStorage:
                     "social_link": c.social_link,
                     "avatar_path": c.avatar_path,
                     "is_deleted": c.is_deleted,
+                    "is_archived": c.is_archived,
                     "notes": c.notes,
                     "requisites": c.requisites,
                     "orders": orders_data,

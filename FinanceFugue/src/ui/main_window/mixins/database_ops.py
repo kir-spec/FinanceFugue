@@ -128,6 +128,13 @@ class DatabaseOpsMixin:
         try:
             selected_id = getattr(self.current_client, "id", None)
             self.clients = self.storage.load()
+            if hasattr(self, "archive_manager"):
+                self.archive_manager._archive_clients_cache = None
+            from ....services.crm_sync_payload import load_personal_finance_sidecar
+            pf = load_personal_finance_sidecar(self.storage.path)
+            mode = (pf or {}).get("app_mode")
+            if mode in ("personal", "crm", "full"):
+                self.app_settings["app_mode"] = mode
             self.refresh_list()
             self.update_dash()
             if hasattr(self, "db_info_label"):

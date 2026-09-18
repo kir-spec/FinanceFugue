@@ -27,6 +27,7 @@ ORDER_DEFAULTS: dict = {
     "deadline": "",
     "status": "В работе",
     "is_deleted": False,
+    "is_archived": False,
     "files": [],
     "payments": [],
     "notes": "",         # поле зарезервировано для будущего использования
@@ -40,6 +41,7 @@ CLIENT_DEFAULTS: dict = {
     "social_link": "",
     "avatar_path": "",
     "is_deleted": False,
+    "is_archived": False,
     "notes": "",
     "requisites": "",
     "orders": [],

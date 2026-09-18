@@ -64,7 +64,7 @@ def create_client_stats_widget(stats: dict) -> QFrame:
     layout.setContentsMargins(0, 0, 0, 0)
 
     stat_items = [
-        ("ВСЕГО", str(stats["total_orders"]), "#00D1FF", "Всего заказов у данного клиента"),
+        ("В РАБОТЕ", str(stats.get("active_orders", 0)), "#00D1FF", "Заказы в работе (как в Telegram-боте)"),
         ("ГОТОВО", str(stats["completed_orders"]), "#28A745", "Выполненные заказы клиента"),
         ("АВАНС", stats["advance_display"], "#FFD700", "Сумма авансов по заказам в работе"),
         ("ВНЕСЕНО", stats["received_display"], "#28A745", "Общая сумма оплат от клиента"),

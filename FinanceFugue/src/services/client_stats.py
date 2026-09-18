@@ -4,22 +4,27 @@ from datetime import datetime
 
 from ..models import Client
 from .currency import format_multi_currency, has_outstanding_debt, sum_by_currency
+from .order_status import classify_order, is_order_in_work, normalize_order_status
 
 
 def calculate_client_stats(client: Client) -> dict:
-    active_orders = [o for o in client.orders if not getattr(o, "is_deleted", False)]
-    total_orders = len(active_orders)
-    completed_orders = sum(1 for o in active_orders if o.status == "Завершен")
-    advance_by = sum_by_currency(active_orders, field="advance")
-    received_by = sum_by_currency(active_orders, field="total_received")
+    orders = [o for o in client.orders if not getattr(o, "is_deleted", False)]
+    total_orders = len(orders)
+    active_orders = sum(1 for o in orders if classify_order(o) == "in_work")
+    completed_orders = sum(1 for o in orders if classify_order(o) == "completed")
+    cancelled_orders = sum(1 for o in orders if classify_order(o) == "cancelled")
+    advance_by = sum_by_currency(orders, field="advance")
+    received_by = sum_by_currency(orders, field="total_received")
     debt_by = sum_by_currency(
-        active_orders,
+        orders,
         field="debt",
         active_only=True,
     )
     return {
         "total_orders": total_orders,
+        "active_orders": active_orders,
         "completed_orders": completed_orders,
+        "cancelled_orders": cancelled_orders,
         "total_received": sum(received_by.values()),
         "total_advance": sum(advance_by.values()),
         "total_debt": sum(debt_by.values()),
@@ -39,7 +44,7 @@ def calculate_global_dashboard(
     end_date: Optional[datetime] = None
 ) -> list[tuple[str, str, str]]:
     
-    in_work, done = 0, 0
+    in_work, done, cancelled = 0, 0, 0
     active_clients = [c for c in clients if not getattr(c, "is_deleted", False)]
     all_clients = active_clients + (archive_clients or [])
     all_orders = []
@@ -48,7 +53,6 @@ def calculate_global_dashboard(
         for order in client.orders:
             if getattr(order, "is_deleted", False):
                 continue
-            # Парсинг даты заказа
             order_date = None
             if order.created_at:
                 try:
@@ -56,7 +60,6 @@ def calculate_global_dashboard(
                 except ValueError:
                     pass
             
-            # Фильтрация по дате
             if start_date and order_date:
                 if order_date.date() < start_date.date():
                     continue
@@ -65,10 +68,12 @@ def calculate_global_dashboard(
                     continue
                     
             all_orders.append(order)
-
-            if order.status == "Завершен":
+            bucket = classify_order(order)
+            if bucket == "completed":
                 done += 1
-            else:
+            elif bucket == "cancelled":
+                cancelled += 1
+            elif bucket == "in_work":
                 in_work += 1
 
     advance_by = sum_by_currency(all_orders, field="advance")

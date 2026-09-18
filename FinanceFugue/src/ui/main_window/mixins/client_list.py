@@ -6,6 +6,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt, QRunnable
 
 from ....models import Client
+from ....services.order_status import is_order_in_work
 from ....theme import MENU_STYLE
 from ....logger import get_logger
 
@@ -73,7 +74,7 @@ class ClientListMixin:
 
                 deadlines = []
                 for o in client.orders:
-                    if o.status != "Завершен" and o.deadline:
+                    if is_order_in_work(o) and o.deadline:
                         try:
                             dt = datetime.strptime(o.deadline, "%d.%m.%Y")
                             deadlines.append(dt)

@@ -41,6 +41,7 @@ class Order:
     deadline: str = ""
     status: str = "В работе"
     is_deleted: bool = False  # Флаг корзины заказов
+    is_archived: bool = False  # Синхронизация с Telegram-ботом (архив заказа)
     files: List[ProjectFile] = field(default_factory=list)
     payments: List[Payment] = field(default_factory=list)
     # Кэши для агрегатов. Пересчитываются вручную через
@@ -245,6 +246,7 @@ class Client:
     social_link: str = ""  # Добавлено поле ссылки
     avatar_path: str = ""  # Относительный путь до аватарки
     is_deleted: bool = False  # Флаг корзины
+    is_archived: bool = False  # Синхронизация с Telegram-ботом
     notes: str = ""
     requisites: str = ""  # Банковские реквизиты клиента
     orders: List[Order] = field(default_factory=list)

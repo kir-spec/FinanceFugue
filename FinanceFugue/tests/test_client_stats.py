@@ -17,6 +17,7 @@ class TestClientStats(unittest.TestCase):
         stats = calculate_client_stats(client)
         self.assertEqual(stats["total_orders"], 2)
         self.assertEqual(stats["completed_orders"], 1)
+        self.assertEqual(stats["active_orders"], 1)
 
     def test_global_dashboard(self):
         clients = [

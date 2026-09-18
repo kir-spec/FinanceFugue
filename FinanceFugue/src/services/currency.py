@@ -49,8 +49,11 @@ def sum_by_currency(
     
     values_by_currency = defaultdict(list)
     for order in orders:
-        if active_only and getattr(order, "status", "") == "Завершен":
-            continue
+        if active_only:
+            from .order_status import normalize_order_status
+            st = normalize_order_status(getattr(order, "status", "") or "")
+            if st in ("Завершен", "Отменен"):
+                continue
         currency = getattr(order, "currency", "RUB") or "RUB"
         if field == "debt":
             value = order.debt

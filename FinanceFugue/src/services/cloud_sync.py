@@ -19,7 +19,7 @@ from .crm_sync_payload import build_sync_bytes, persist_clients_after_pull
 
 logger = get_logger("CloudSync")
 
-DEFAULT_TELEGRAM_BOT_TOKEN = os.getenv("FINANCE_BOT_TOKEN", os.getenv("TELEGRAM_BOT_TOKEN", "8833825596:AAGFSunb0dXg27TM0W4Ff45W7Vd18I1P95Y"))
+DEFAULT_TELEGRAM_BOT_TOKEN = os.getenv("FINANCE_BOT_TOKEN", os.getenv("TELEGRAM_BOT_TOKEN", ""))
 
 # Протокол обмена с ботом. getUpdates использовать нельзя: бот уже
 # держит long-poll, а исходящие документы бота в updates не попадают.
@@ -337,7 +337,6 @@ class TelegramBotSync:
             "schema_version": 1,
             "clients": [],
             "_sync_action": "pull",
-            "_sync_action": "pull",
         }
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         try:
@@ -359,8 +358,6 @@ class TelegramBotSync:
         if response.status_code != 200:
             return False, None, f"Telegram API Error ({response.status_code}): {response.text}"
         msg_id = (response.json().get("result") or {}).get("message_id")
-        if msg_id:
-            TelegramBotSync._pin_message(token, chat_id, msg_id)
         return True, msg_id, ""
 
     @staticmethod

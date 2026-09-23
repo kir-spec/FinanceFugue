@@ -240,7 +240,12 @@ class DatabaseOpsMixin:
         self._pending_sync_action = action
         self._sync_signature_before = self._crm_file_signature(str(self.storage.path))
 
-        self.cloud_worker = CloudSyncWorker(str(self.storage.path), self.app_settings, action=action)
+        self.cloud_worker = CloudSyncWorker(
+            str(self.storage.path), 
+            self.app_settings, 
+            action=action,
+            password=self.storage.password
+        )
         self.cloud_worker.finished_sync.connect(self._on_sync_finished)
         self.cloud_worker.start()
 

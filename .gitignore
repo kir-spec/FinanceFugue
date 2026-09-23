@@ -17,3 +17,21 @@ FinanceFugue/dist/
 FinanceFugue/build/
 FinanceFugue/.ruff_cache/
 client manager */
+.agents/
+.codebase-memory/
+.cursor/
+.env
+.env.*
+*.pem
+*.key
+node_modules/
+venv/
+__pycache__/
+dist/
+build/
+target/
+.gradle/
+.idea/
+*.log
+.DS_Store
+Thumbs.db

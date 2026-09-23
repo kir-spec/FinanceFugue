@@ -72,11 +72,17 @@ def split_active_and_archive(clients: List[Client]) -> Tuple[List[Client], List[
     return active_clients, list(archive_by_id.values())
 
 
-def load_clients_for_sync(db_path: Path | str) -> List[Client]:
+def load_clients_for_sync(db_path: Path | str, password: str = "") -> List[Client]:
     path = Path(db_path)
-    active = CRMStorage(path).load()
+    active_store = CRMStorage(path)
+    active_store.password = password
+    active = active_store.load()
+    
     arch_path = path.parent / "pro_archive.json"
-    archive = CRMStorage(arch_path).load() if arch_path.exists() else []
+    archive_store = CRMStorage(arch_path)
+    archive_store.password = password
+    archive = archive_store.load() if arch_path.exists() else []
+    
     return merge_active_and_archive(active, archive)
 
 
@@ -142,22 +148,40 @@ def save_personal_finance_sidecar(db_path: Path | str, data: Dict[str, Any]) -> 
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def persist_clients_after_pull(db_path: Path | str, merged_envelope: Dict[str, Any]) -> None:
+def persist_clients_after_pull(db_path: Path | str, merged_envelope: Dict[str, Any], password: str = "") -> None:
     path = Path(db_path)
     clients_raw = merged_envelope.get("clients") or []
     clients = _parse_clients_list(clients_raw)
     active, archive = split_active_and_archive(clients)
-    CRMStorage(path).save(active)
+    
+    # Чтобы сохранение двух файлов было транзакционным,
+    # мы сначала сохраним их во временные пути, а затем переименуем.
+    active_tmp = path.with_suffix(".tmp.active")
+    archive_tmp = path.parent / "pro_archive.tmp.archive"
     arch_path = path.parent / "pro_archive.json"
-    CRMStorage(arch_path).save(archive)
+    
+    # Инициализируем хранилища с временными путями (но передаем пароль если есть)
+    active_store = CRMStorage(active_tmp)
+    active_store.password = password
+    archive_store = CRMStorage(archive_tmp)
+    archive_store.password = password
+    
+    # Пишем во временные файлы (внутри save() они тоже пишутся в .tmp.tmp и атомарно переименовываются в наш .tmp)
+    active_store.save(active)
+    archive_store.save(archive)
+    
+    import os
+    # Атомарно переносим на боевые пути
+    os.replace(active_tmp, path)
+    os.replace(archive_tmp, arch_path)
+    
     pf = merged_envelope.get("personal_finance")
     if isinstance(pf, dict) and pf:
         save_personal_finance_sidecar(path, pf)
 
-
-def build_sync_envelope(db_path: Path | str) -> Dict[str, Any]:
+def build_sync_envelope(db_path: Path | str, password: str = "") -> Dict[str, Any]:
     path = Path(db_path)
-    clients = load_clients_for_sync(path)
+    clients = load_clients_for_sync(path, password=password)
     envelope = _clients_to_envelope_dict(clients)
     pf = load_personal_finance_sidecar(path)
     if pf:
@@ -165,5 +189,5 @@ def build_sync_envelope(db_path: Path | str) -> Dict[str, Any]:
     return envelope
 
 
-def build_sync_bytes(db_path: Path | str) -> bytes:
-    return json.dumps(build_sync_envelope(db_path), ensure_ascii=False, indent=2).encode("utf-8")
+def build_sync_bytes(db_path: Path | str, password: str = "") -> bytes:
+    return json.dumps(build_sync_envelope(db_path, password=password), ensure_ascii=False, indent=2).encode("utf-8")

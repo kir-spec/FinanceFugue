@@ -37,27 +37,26 @@ class TelegramSyncDialog(QDialog):
         info_label.setWordWrap(True)
         header_layout.addWidget(info_label)
         layout.addWidget(header_box)
-
         # Настройки подключения
-        conn_group = QGroupBox("Параметры авторизации в Telegram")
+        conn_group = QGroupBox("Параметры подключения к серверу (VPS)")
         form = QFormLayout(conn_group)
 
-        self.chat_id_edit = QLineEdit(str(self.app_settings.get("telegram_chat_id", "")))
-        self.chat_id_edit.setPlaceholderText("Например: 123456789")
-        self.chat_id_edit.setToolTip("Ваш уникальный цифровой ID в Telegram")
+        self.chat_id_edit = QLineEdit(str(self.app_settings.get("telegram_chat_id", "http://104.143.218.58:8089")))
+        self.chat_id_edit.setPlaceholderText("Например: http://104.143.218.58:8089")
+        self.chat_id_edit.setToolTip("URL-адрес вашего VPS сервера для синхронизации")
 
         tg_help = QLabel(
-            "<i>💡 Как узнать свой Chat ID: откройте финансового бота и нажмите <b>/sync</b> или напишите боту @userinfobot</i>"
+            "<i>💡 Отправьте вашему Telegram-боту команду <b>/link_pc</b>, чтобы сгенерировать ключ ниже</i>"
         )
-        self.token_edit = QLineEdit(self.app_settings.get("telegram_token", DEFAULT_TELEGRAM_BOT_TOKEN))
-        self.token_edit.setPlaceholderText("123456789:ABCdefGHIjklMNOpqrSTUvwxYZ")
-        self.token_edit.setToolTip("Токен вашего Telegram-бота (из @BotFather)")
+        self.token_edit = QLineEdit(self.app_settings.get("telegram_token", ""))
+        self.token_edit.setPlaceholderText("ff_sync_ABC123...")
+        self.token_edit.setToolTip("Уникальный ключ синхронизации для вашего пользователя")
 
-        form.addRow("Ваш Telegram Chat ID:", self.chat_id_edit)
+        form.addRow("URL сервера (IP:Port):", self.chat_id_edit)
         form.addRow("", tg_help)
-        form.addRow("Токен бота (Bot Token):", self.token_edit)
+        form.addRow("Ключ синхронизации:", self.token_edit)
 
-        btn_test = QPushButton("⚡️ Проверить связь с ботом")
+        btn_test = QPushButton("⚡️ Проверить связь с сервером")
         btn_test.clicked.connect(self._test_connection)
         form.addRow("", btn_test)
 
@@ -67,7 +66,7 @@ class TelegramSyncDialog(QDialog):
         opts_group = QGroupBox("Режим работы")
         opts_layout = QVBoxLayout(opts_group)
 
-        self.auto_sync_cb = QCheckBox("Автоматически синхронизировать с ботом при сохранении на ПК")
+        self.auto_sync_cb = QCheckBox("Автоматически синхронизировать с сервером при сохранении на ПК")
         self.auto_sync_cb.setChecked(self.app_settings.get("auto_telegram_sync", True))
         opts_layout.addWidget(self.auto_sync_cb)
         layout.addWidget(opts_group)
@@ -77,12 +76,12 @@ class TelegramSyncDialog(QDialog):
         actions_layout = QVBoxLayout(actions_group)
 
         btn_row1 = QHBoxLayout()
-        self.btn_push = QPushButton("⬆️ Отправить базу в бота (Push)")
-        self.btn_push.setToolTip("Выгрузить текущую базу с ПК в Telegram-бота")
+        self.btn_push = QPushButton("⬆️ Отправить базу на сервер (Push)")
+        self.btn_push.setToolTip("Выгрузить текущую базу с ПК на сервер")
         self.btn_push.clicked.connect(self._push_to_bot)
 
-        self.btn_pull = QPushButton("⬇️ Загрузить базу из бота (Pull)")
-        self.btn_pull.setToolTip("Загрузить в программу последнюю версию базы, отправленную в боте")
+        self.btn_pull = QPushButton("⬇️ Загрузить базу с сервера (Pull)")
+        self.btn_pull.setToolTip("Загрузить в программу последнюю версию базы с сервера")
         self.btn_pull.clicked.connect(self._pull_from_bot)
 
         btn_row1.addWidget(self.btn_push)
@@ -148,9 +147,12 @@ class TelegramSyncDialog(QDialog):
             return
 
         self._set_busy(True, "⏳ Проверка связи с ботом...")
-        self._log("Отправка тестового запроса в Telegram...")
-
-        self.worker = CloudSyncWorker(str(self.window.storage.path), self.app_settings, action="test_telegram")
+        self.worker = CloudSyncWorker(
+            str(self.window.storage.path), 
+            self.app_settings, 
+            action="test_telegram",
+            password=self.window.storage.password
+        )
         self.worker.finished_sync.connect(self._on_test_finished)
         self.worker.start()
 
@@ -179,9 +181,12 @@ class TelegramSyncDialog(QDialog):
             logger.warning("Ошибка предварительного сохранения базы перед синхронизацией: %s", e)
 
         self._set_busy(True, "⏳ Отправка базы данных в Telegram...")
-        self._log("Выгрузка базы данных в чат с ботом...")
-
-        self.worker = CloudSyncWorker(str(self.window.storage.path), self.app_settings, action="push")
+        self.worker = CloudSyncWorker(
+            str(self.window.storage.path), 
+            self.app_settings, 
+            action="push",
+            password=self.window.storage.password
+        )
         self.worker.finished_sync.connect(self._on_push_finished)
         self.worker.start()
 
@@ -201,9 +206,12 @@ class TelegramSyncDialog(QDialog):
             return
 
         self._set_busy(True, "⏳ Загрузка последней базы из Telegram...")
-        self._log("Запрос актуальной базы данных из Telegram...")
-
-        self.worker = CloudSyncWorker(str(self.window.storage.path), self.app_settings, action="pull_telegram")
+        self.worker = CloudSyncWorker(
+            str(self.window.storage.path), 
+            self.app_settings, 
+            action="pull_telegram",
+            password=self.window.storage.password
+        )
         self.worker.finished_sync.connect(self._on_pull_finished)
         self.worker.start()
 
@@ -237,9 +245,12 @@ class TelegramSyncDialog(QDialog):
             logger.warning("Ошибка предварительного сохранения базы перед синхронизацией: %s", e)
 
         self._set_busy(True, "⏳ Двусторонняя синхронизация с ботом...")
-        self._log("Отправка базы на ПК и загрузка данных из бота...")
-
-        self.worker = CloudSyncWorker(str(self.window.storage.path), self.app_settings, action="full_sync")
+        self.worker = CloudSyncWorker(
+            str(self.window.storage.path), 
+            self.app_settings, 
+            action="full_sync",
+            password=self.window.storage.password
+        )
         self.worker.finished_sync.connect(self._on_full_sync_finished)
         self.worker.start()
 
